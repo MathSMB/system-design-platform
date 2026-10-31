@@ -1,0 +1,92 @@
+import { spawn } from "node:child_process";
+import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
+import type { AiProvider, Evaluation, EvaluationInput } from "./types";
+
+export interface ClaudeCodeOptions {
+  /** Caminho do executável. Padrão: "claude" (ou a variável CLAUDE_BIN). */
+  bin?: string;
+  /** Modelo, ex. "opus" ou "sonnet". Padrão: o do Claude Code. */
+  model?: string;
+  timeoutMs?: number;
+}
+
+/**
+ * Usa o Claude Code instalado na máquina, logado com a assinatura (Pro/Max).
+ *
+ * Só serve para uso pessoal e local: a assinatura não pode alimentar um app
+ * publicado para outras pessoas. Para isso, use o AnthropicApiProvider.
+ */
+export class ClaudeCodeProvider implements AiProvider {
+  readonly name = "claude-code";
+  constructor(private opts: ClaudeCodeOptions = {}) {}
+
+  async evaluate(input: EvaluationInput): Promise<Evaluation> {
+    const args = [
+      "-p",
+      "--output-format",
+      "json",
+      "--json-schema",
+      JSON.stringify(EVALUATION_SCHEMA),
+      "--system-prompt",
+      SYSTEM_PROMPT,
+      "--tools",
+      "",
+      "--no-session-persistence",
+    ];
+    if (this.opts.model) args.push("--model", this.opts.model);
+
+    const stdout = await run(
+      this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude",
+      args,
+      buildPrompt(input),
+      this.opts.timeoutMs ?? 180_000,
+    );
+    return parseClaudeOutput(stdout);
+  }
+}
+
+export function parseClaudeOutput(stdout: string): Evaluation {
+  let envelope: Record<string, unknown>;
+  try {
+    envelope = JSON.parse(stdout);
+  } catch {
+    throw new Error(`Saída inesperada do Claude Code: ${stdout.slice(0, 300)}`);
+  }
+  if (envelope.is_error) {
+    throw new Error(`Claude Code retornou erro: ${String(envelope.result ?? envelope.subtype ?? "desconhecido")}`);
+  }
+  if (envelope.structured_output) return normalizeEvaluation(envelope.structured_output);
+  return normalizeEvaluation(extractJson(String(envelope.result ?? "")));
+}
+
+function run(bin: string, args: string[], stdin: string, timeoutMs: number): Promise<string> {
+  // Sem ANTHROPIC_API_KEY no ambiente, o Claude Code usa o login da assinatura.
+  const env = { ...process.env };
+  delete env.ANTHROPIC_API_KEY;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, { env, stdio: ["pipe", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`Claude Code não respondeu em ${Math.round(timeoutMs / 1000)}s.`));
+    }, timeoutMs);
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.on("error", (e: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      reject(
+        e.code === "ENOENT"
+          ? new Error("Claude Code não encontrado. Instale (npm i -g @anthropic-ai/claude-code) e rode `claude` uma vez para fazer login.")
+          : e,
+      );
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0 || out.trim().startsWith("{")) resolve(out);
+      else reject(new Error(`Claude Code saiu com código ${code}: ${err.slice(0, 500)}`));
+    });
+    child.stdin.end(stdin);
+  });
+}
