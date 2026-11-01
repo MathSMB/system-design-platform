@@ -1,6 +1,6 @@
 # System Design Lab
 
-Plataforma para treinar entrevistas de system design: **desenhe** a arquitetura num canvas estilo Excalidraw, **simule** carga e concorrência de verdade e receba **avaliação por IA**.
+Plataforma para treinar entrevistas de system design: **desenhe** a arquitetura num canvas com visual neon de diagrama de arquitetura, **simule** carga e concorrência de verdade e receba **avaliação por IA**.
 
 A base técnica do projeto (conceitos, como simular cada um, cenários de entrevista, referências) está em [`docs/base-tecnica.md`](docs/base-tecnica.md).
 
@@ -61,7 +61,7 @@ A avaliação por IA publicada precisa de `AI_PROVIDER=api` e `ANTHROPIC_API_KEY
 ## Estrutura
 
 ```
-apps/web               Next.js (canvas com React Flow + rough.js, Tailwind, Zustand, uPlot)
+apps/web               Next.js (canvas com React Flow + ícones lucide, Tailwind, Zustand, uPlot)
 packages/sim-engine    Motor de carga: simulação de eventos discretos (roda num Web Worker)
 packages/race-sim      Motor de concorrência: intercalação passo a passo + mini-banco com locks
 packages/ai            Avaliação por IA: Claude Code local (assinatura) ou API da Anthropic
