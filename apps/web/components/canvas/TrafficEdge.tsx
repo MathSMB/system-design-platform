@@ -1,7 +1,7 @@
 "use client";
 
 import { BaseEdge, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
-import { memo } from "react";
+import { memo, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useCanvas } from "./store";
 
@@ -33,6 +33,20 @@ function useFlow(target: string): Flow | null {
   );
 }
 
+const REDUCE = "(prefers-reduced-motion: reduce)";
+/** Quem pediu menos movimento no sistema operacional não vê as setinhas andando. */
+function useReducedMotion() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(REDUCE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(REDUCE).matches,
+    () => false,
+  );
+}
+
 /**
  * Aresta com tráfego: setinhas andam da origem ao destino.
  * Mais tráfego = mais setinhas e mais rápidas. Setinhas vermelhas são barradas antes de chegar
@@ -43,6 +57,7 @@ function TrafficEdgeImpl(props: EdgeProps) {
   const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   const flow = useFlow(target);
   const running = useCanvas((s) => s.running);
+  const reduced = useReducedMotion();
 
   const length = Math.abs(targetX - sourceX) + Math.abs(targetY - sourceY) + 1;
   const active = !!flow && flow.rps > 0.5;
@@ -51,7 +66,7 @@ function TrafficEdgeImpl(props: EdgeProps) {
 
   // quantidade e velocidade crescem com o log do tráfego
   const lg = active ? Math.log10(flow.rps + 1) : 0;
-  const count = running ? 2 : active ? Math.min(9, Math.max(1, Math.round(lg * 2.2))) : 0;
+  const count = reduced ? 0 : running ? 2 : active ? Math.min(9, Math.max(1, Math.round(lg * 2.2))) : 0;
   const speed = running ? 45 : 60 + lg * 35; // px/s
   const dur = Math.max(0.8, length / speed);
   const redCount = !active ? 0 : totalBlock ? count : blocked ? Math.max(1, Math.round(count * Math.min(1, flow.blockedShare * 2))) : 0;
