@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESETS, simulate } from "@sdp/sim-engine";
@@ -39,11 +39,11 @@ describe("avaliação por IA", () => {
 
   it("chama o Claude Code pela linha de comando, sem a chave de API no ambiente", async () => {
     const dir = mkdtempSync(join(tmpdir(), "fake-claude-"));
-    const bin = join(dir, "claude");
+    // roda o "claude" falso pelo próprio node, para funcionar também no Windows
+    const script = join(dir, "fake-claude.mjs");
     writeFileSync(
-      bin,
-      `#!/usr/bin/env node
-let input = "";
+      script,
+      `let input = "";
 process.stdin.on("data", (d) => (input += d));
 process.stdin.on("end", () => {
   const args = process.argv.slice(2);
@@ -52,9 +52,8 @@ process.stdin.on("end", () => {
 });
 `,
     );
-    chmodSync(bin, 0o755);
     process.env.ANTHROPIC_API_KEY = "nao-deve-vazar";
-    const e = await new ClaudeCodeProvider({ bin }).evaluate({ problem: "Encurtador", graph: PRESETS.singleServer!.graph });
+    const e = await new ClaudeCodeProvider({ bin: process.execPath, binArgs: [script] }).evaluate({ problem: "Encurtador", graph: PRESETS.singleServer!.graph });
     delete process.env.ANTHROPIC_API_KEY;
     expect(e.judges[0]!.name).toBe("A");
   });
