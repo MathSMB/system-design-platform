@@ -8,6 +8,7 @@ A base técnica do projeto (conceitos, como simular cada um, cenários de entrev
 
 - **Canvas de carga** (`/canvas`): arraste componentes (usuários, load balancer, servidor, cache, CDN, banco, fila, serviço externo), conecte e clique em Simular. A simulação mostra req/s, erros, p50/p99, gráfico no tempo e um painel "onde quebrou". Dá para derrubar um componente num segundo específico (ex.: derrubar o cache e ver a avalanche no banco).
 - **Trilha de 0 a 1 milhão de usuários**: arquiteturas prontas para começar.
+- **Réplicas de leitura com replication lag**: o banco pode ter réplicas (leituras nas réplicas, escritas no primário). Os usuários fazem uma fração de escritas e releem logo depois; o simulador conta quantas leituras voltam **sem a escrita do próprio usuário** e mostra o lag. A opção *read-your-writes* (ler do primário por um tempo após escrever) corrige, e dá para ver a carga voltando para o primário. Trilha "4. Réplicas de leitura".
 - **Laboratório de concorrência** (`/concorrencia`): avance duas transações passo a passo e veja race conditions acontecendo. O botão "testar todas as ordens possíveis" enumera todas as intercalações e mostra em quantas a regra quebra. Cenários: último ingresso (lost update) e três correções (UPDATE atômico, SELECT FOR UPDATE, lock otimista), write skew, deadlock e cache-aside com valor velho.
 - **Avaliação por IA** (aba Avaliação no canvas): dois avaliadores (big tech e staff de startup) dão nota por dimensão, perguntas de follow-up e próximos passos, usando os números da simulação como evidência.
 
@@ -47,6 +48,16 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm --filter web db:push
 ```
 
+## Ver online (Vercel)
+
+Canvas, simulação e laboratório de concorrência rodam no navegador, então funcionam publicados sem configurar nada:
+
+1. Entre em [vercel.com/new](https://vercel.com/new) com a sua conta do GitHub e importe `system-design-platform`.
+2. Em **Root Directory**, escolha `apps/web` (a Vercel detecta Next.js e o pnpm do monorepo).
+3. Clique em Deploy. Cada PR ganha um link de preview automático.
+
+A avaliação por IA publicada precisa de `AI_PROVIDER=api` e `ANTHROPIC_API_KEY` nas variáveis de ambiente do projeto na Vercel (a assinatura só vale rodando local). Sem `DATABASE_URL`, os desenhos ficam salvos no navegador.
+
 ## Estrutura
 
 ```
@@ -60,6 +71,7 @@ docs/                  Base técnica
 ## Como o simulador garante correção
 
 - **Motor de carga**: cada componente é uma fila com N workers, tempo de serviço aleatório (lognormal por padrão) e fila limitada. Tudo com seed fixa, então o mesmo desenho dá o mesmo resultado. Os testes conferem o motor contra a teoria: fila M/M/1 (latência média = 1/(μ − λ)), Lei de Little, amplificação de retries e avalanche de cache.
+- **Réplicas**: cada réplica tem os mesmos workers do primário para leituras e aplica as escritas numa thread só, em ordem (como o replay do WAL no PostgreSQL). Lag = atraso de rede + espera na fila de replay + aplicar. Aplicar custa 5% do tempo de serviço da query (aproximação: o replay não faz parse, plano nem lock). Os testes conferem que, com escrita acima da capacidade de replay, o lag no fim é T·(1 − μ/λ), como numa fila sobrecarregada.
 - **Motor de concorrência**: modela Read Committed como no PostgreSQL (escritas dentro de BEGIN só aparecem no COMMIT; UPDATE e SELECT FOR UPDATE travam a linha até o fim da transação). Os testes garantem que o cenário com bug quebra em alguma ordem e que as correções nunca quebram.
 
 ```bash
@@ -70,5 +82,5 @@ pnpm typecheck
 ## Limitações conhecidas (próximos passos)
 
 - O servidor libera o worker enquanto espera dependências (modelo assíncrono, tipo Node). Pool de conexões bloqueante ainda não é modelado.
-- Ainda não há réplicas de leitura com replication lag, sharding nem autoscaling no simulador.
+- Ainda não há sharding nem autoscaling no simulador. Réplicas não disputam CPU/disco entre leitura e replay, e o cache não guarda dado velho (escritas invalidam a chave).
 - Cargas muito altas reduzem a duração simulada para não travar o navegador (o app avisa).

@@ -32,6 +32,12 @@ export function ResultsPanel() {
           </div>
         ))}
       </div>
+      {r.consistency.staleReads > 0 && (
+        <div className="rounded-md border border-bad/50 bg-bad/10 p-2 text-xs text-bad">
+          <span className="font-mono">{fmt(r.consistency.staleReads)}</span> leituras com dado velho (
+          {fmt((r.consistency.staleReads / Math.max(1, r.consistency.dbReads)) * 100, 1)}% das leituras no banco)
+        </div>
+      )}
       {r.warnings.map((w) => (
         <p key={w} className="text-xs text-warn">{w}</p>
       ))}
@@ -48,11 +54,19 @@ export function ResultsPanel() {
         <summary className="cursor-pointer">Detalhes por componente</summary>
         <table className="mt-2 w-full font-mono">
           <thead>
-            <tr className="text-left"><th>nó</th><th>util.</th><th>rejeit.</th><th>fila máx</th></tr>
+            <tr className="text-left"><th>nó</th><th>util.</th><th>rejeit.</th><th>fila máx</th><th>lag máx</th></tr>
           </thead>
           <tbody>
             {r.nodes.map((n) => (
-              <tr key={n.nodeId}><td>{n.nodeId}</td><td>{fmt(n.utilization * 100)}%</td><td>{fmt(n.rejected)}</td><td>{fmt(n.maxQueue)}</td></tr>
+              <tr key={n.nodeId}>
+                <td>{n.nodeId}</td>
+                <td>
+                  {fmt(n.utilization * 100)}%{n.replicaUtilization !== undefined && ` / ${fmt(n.replicaUtilization * 100)}%`}
+                </td>
+                <td>{fmt(n.rejected)}</td>
+                <td>{fmt(n.maxQueue)}</td>
+                <td>{n.replicationLag ? `${fmt(n.replicationLag.maxMs)} ms` : "–"}</td>
+              </tr>
             ))}
           </tbody>
         </table>

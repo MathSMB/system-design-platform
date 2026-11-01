@@ -30,7 +30,7 @@ export function Inspector() {
               step={f.step ?? 1}
               min={f.min}
               max={f.max}
-              value={Number(params[f.key])}
+              value={Number(params[f.key] ?? 0)}
               onChange={(e) => updateNode(node.id, { params: { ...params, [f.key]: Number(e.target.value) } })}
             />
           ) : (
