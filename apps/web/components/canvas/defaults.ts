@@ -19,17 +19,6 @@ export const DEFAULT_PARAMS: { [K in NodeKind]: NodeParamsByKind[K] } = {
   external: { workers: 10, serviceTimeMs: 300, queueCapacity: 100, errorRate: 0.01 },
 };
 
-export const KIND_ICON: Record<NodeKind, string> = {
-  client: "👥",
-  loadBalancer: "⚖️",
-  server: "🖥️",
-  cache: "⚡",
-  cdn: "🌍",
-  database: "🗄️",
-  queue: "📬",
-  external: "🔌",
-};
-
 export type Field =
   | { key: string; label: string; help?: string; type: "number"; step?: number; min?: number; max?: number }
   | { key: string; label: string; help?: string; type: "select"; options: { value: string; label: string }[] };

@@ -42,16 +42,16 @@ export function EvaluationPanel() {
         <span className="text-muted">Sua explicação (requisitos, estimativas, trade-offs)</span>
         <textarea rows={4} value={notes} onChange={(e) => set({ notes: e.target.value })} />
       </label>
-      <button onClick={evaluate} disabled={loading} className="self-start rounded-md bg-accent px-3 py-1.5 font-medium text-bg disabled:opacity-50">
+      <button onClick={evaluate} disabled={loading} className="btn-neon self-start px-3 py-1.5 text-xs disabled:opacity-50">
         {loading ? "Avaliando… (pode levar ~1 min)" : "Avaliar com IA"}
       </button>
       {error && <p className="text-down">{error}</p>}
       {evaluation && (
         <div className="flex flex-col gap-3">
-          <div className="font-mono text-2xl">{evaluation.overallScore}/10</div>
+          <div className="font-display text-xl text-accent glow">{evaluation.overallScore}/10</div>
           <p className="text-muted">{evaluation.consensus}</p>
           {evaluation.judges.map((j) => (
-            <div key={j.name} className="rounded-md border border-border bg-panel-2 p-2">
+            <div key={j.name} className="panel p-2">
               <div className="font-medium">{j.name} · {j.score}/10</div>
               <div className="text-[11px] text-muted">{j.perspective}</div>
               <ul className="mt-1 list-disc pl-4">
@@ -72,11 +72,11 @@ export function EvaluationPanel() {
             </tbody>
           </table>
           <div>
-            <div className="font-mono text-[11px] uppercase text-muted">O entrevistador perguntaria</div>
+            <div className="hud-label">O entrevistador perguntaria</div>
             <ul className="list-disc pl-4">{evaluation.followUpQuestions.map((q) => <li key={q}>{q}</li>)}</ul>
           </div>
           <div>
-            <div className="font-mono text-[11px] uppercase text-muted">Próximos passos</div>
+            <div className="hud-label">Próximos passos</div>
             <ul className="list-disc pl-4">{evaluation.nextSteps.map((q) => <li key={q}>{q}</li>)}</ul>
           </div>
         </div>

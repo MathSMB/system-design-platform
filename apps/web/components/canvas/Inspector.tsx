@@ -16,7 +16,7 @@ export function Inspector() {
 
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <div className="font-mono text-[11px] uppercase tracking-wider text-muted">{KIND_LABEL[kind]}</div>
+      <div className="hud-label">{KIND_LABEL[kind]}</div>
       <label className="flex flex-col gap-1">
         <span className="text-muted">Nome</span>
         <input value={label} onChange={(e) => updateNode(node.id, { label: e.target.value })} />

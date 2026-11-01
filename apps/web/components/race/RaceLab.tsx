@@ -14,7 +14,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-const LANE_COLORS = ["text-accent", "text-warn"];
+const LANE_COLORS = ["text-accent", "text-accent-2"];
 
 export function RaceLab() {
   const params = useSearchParams();
@@ -41,12 +41,12 @@ export function RaceLab() {
   return (
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[260px_1fr]">
       <aside className="flex flex-col gap-1">
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted">Cenários</div>
+        <div className="mb-1 hud-label">Cenários</div>
         {SCENARIOS.map((s) => (
           <button
             key={s.id}
             onClick={() => router.push(`/concorrencia?c=${s.id}`)}
-            className={`rounded-md px-2 py-1.5 text-left text-sm ${s.id === scenario.id ? "bg-panel-2 text-text" : "text-muted hover:text-text"}`}
+            className={`rounded-md px-2 py-1.5 text-left text-sm ${s.id === scenario.id ? "border-l-2 border-accent bg-accent/10 text-text" : "text-muted hover:text-text"}`}
           >
             {s.title}
           </button>
@@ -55,7 +55,7 @@ export function RaceLab() {
 
       <main className="flex flex-col gap-5">
         <div>
-          <h1 className="font-hand text-3xl">{scenario.title}</h1>
+          <h1 className="font-display text-lg leading-relaxed text-accent glow">{scenario.title}</h1>
           <p className="mt-1 text-muted">{scenario.description}</p>
         </div>
 
@@ -63,13 +63,13 @@ export function RaceLab() {
           {scenario.txs.map((tx, i) => {
             const st = run.txs[i]!;
             return (
-              <div key={tx.name} className="rounded-lg border border-border bg-panel p-3">
+              <div key={tx.name} className="panel p-3">
                 <div className="flex items-center justify-between">
                   <div className={`font-medium ${LANE_COLORS[i]}`}>{tx.name}</div>
                   <button
                     disabled={!canStep[i]}
                     onClick={() => setRun(stepTx(scenario, run, i)!)}
-                    className="rounded-md bg-accent px-2 py-1 text-xs font-medium text-bg disabled:opacity-30"
+                    className="btn-neon px-2 py-1 text-[11px] disabled:opacity-30"
                   >
                     {st.done ? "terminou" : canStep[i] ? "Avançar ▶" : "bloqueada 🔒"}
                   </button>
@@ -91,8 +91,8 @@ export function RaceLab() {
         </div>
 
         <div className="flex flex-wrap gap-2 text-sm">
-          <button onClick={() => setRun(createRun(scenario))} className="rounded-md border border-border px-3 py-1.5 hover:border-accent">Reiniciar</button>
-          <button onClick={() => setSummary(exploreAll(scenario))} className="rounded-md border border-border px-3 py-1.5 hover:border-accent">
+          <button onClick={() => setRun(createRun(scenario))} className="btn-ghost px-3 py-1.5">Reiniciar</button>
+          <button onClick={() => setSummary(exploreAll(scenario))} className="btn-ghost px-3 py-1.5">
             Testar todas as ordens possíveis
           </button>
         </div>
@@ -114,8 +114,8 @@ export function RaceLab() {
         )}
 
         <div className="grid gap-4 md:grid-cols-[1fr_240px]">
-          <div className="rounded-lg border border-border bg-panel p-3">
-            <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-muted">Linha do tempo</div>
+          <div className="panel p-3">
+            <div className="mb-2 hud-label">Linha do tempo</div>
             {run.trace.length === 0 ? (
               <p className="text-sm text-muted">Avance as transações em qualquer ordem e veja o que acontece.</p>
             ) : (
@@ -138,15 +138,15 @@ export function RaceLab() {
             {deadlock && <div className="mt-3 rounded-md bg-down/10 p-2 text-sm text-down">Deadlock: cada transação espera um lock que a outra segura.</div>}
           </div>
 
-          <div className="rounded-lg border border-border bg-panel p-3 font-mono text-xs">
-            <div className="mb-2 text-[11px] uppercase tracking-wider text-muted">Estado confirmado</div>
+          <div className="panel p-3 font-mono text-xs">
+            <div className="mb-2 hud-label">Estado confirmado</div>
             {visibleRows.map(([k, r]) => (
               <div key={k} className="flex justify-between">
                 <span className="text-muted">{k}</span>
                 <span>{r.value ?? "vazio"}</span>
               </div>
             ))}
-            <div className="mt-3 text-[11px] uppercase tracking-wider text-muted">Locks</div>
+            <div className="mt-3 hud-label">Locks</div>
             {Object.keys(run.db.locks).length === 0 ? (
               <div className="text-muted">nenhum</div>
             ) : (
@@ -156,7 +156,7 @@ export function RaceLab() {
             )}
             {run.db.log.length > 0 && (
               <>
-                <div className="mt-3 text-[11px] uppercase tracking-wider text-muted">Eventos</div>
+                <div className="mt-3 hud-label">Eventos</div>
                 {run.db.log.map((l, k) => (
                   <div key={k}>{l.event} <span className={LANE_COLORS[l.tx]}>({scenario.txs[l.tx]!.name})</span></div>
                 ))}
@@ -165,7 +165,7 @@ export function RaceLab() {
           </div>
         </div>
 
-        <p className="rounded-lg border border-border bg-panel-2 p-3 text-sm text-muted">
+        <p className="panel p-3 text-sm text-muted">
           <strong className="text-text">Lição: </strong>
           {scenario.lesson}
         </p>

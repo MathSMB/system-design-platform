@@ -2,22 +2,24 @@
 @import "@xyflow/react/dist/style.css";
 @import "uplot/dist/uPlot.min.css";
 
+/* Tema "terminal neon": fundo quase preto azulado, acentos ciano e magenta, fonte pixel nos títulos. */
 :root {
-  --bg: #0b0d10;
-  --panel: #12151a;
-  --panel-2: #181c22;
-  --border: #262b33;
-  --text: #e6e8eb;
-  --muted: #8b939e;
-  --accent: #7c9cff;
-  --ok: #4ade80;
-  --warn: #facc15;
-  --bad: #fb923c;
-  --down: #f87171;
-  --ink: #d7dbe0;
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-hand: "Excalifont", "Virgil", "Comic Neue", "Segoe Print", ui-rounded, cursive;
+  --bg: #05060b;
+  --panel: #0b0e17;
+  --panel-2: #111626;
+  --border: #1d2540;
+  --text: #e6f1ff;
+  --muted: #7d8bab;
+  --accent: #22e4ff; /* ciano neon */
+  --accent-2: #ff3cac; /* magenta neon */
+  --ok: #39ff8f;
+  --warn: #ffe14d;
+  --bad: #ff9a3c;
+  --down: #ff4d6d;
+  --ink: #9fb4ff;
+  --font-sans: "Chakra Petch", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: "Press Start 2P", "Chakra Petch", ui-monospace, monospace;
 }
 
 @theme inline {
@@ -28,13 +30,14 @@
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
   --color-down: var(--down);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-hand: var(--font-hand);
+  --font-display: var(--font-display);
 }
 
 html,
@@ -44,30 +47,187 @@ body {
   font-family: var(--font-sans);
 }
 
+body {
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(34, 228, 255, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 110% 0%, rgba(255, 60, 172, 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(34, 228, 255, 0.3);
+}
+
+/* Texto com brilho neon */
+@utility glow {
+  text-shadow:
+    0 0 6px color-mix(in srgb, currentColor 70%, transparent),
+    0 0 18px color-mix(in srgb, currentColor 35%, transparent);
+}
+
+/* Painel com borda fina e brilho discreto */
+@utility panel {
+  background: linear-gradient(180deg, rgba(17, 22, 38, 0.92), rgba(11, 14, 23, 0.92));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Botão principal neon */
+@utility btn-neon {
+  background: var(--accent);
+  color: #001218;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  box-shadow:
+    0 0 12px rgba(34, 228, 255, 0.55),
+    0 0 2px rgba(34, 228, 255, 0.9);
+  transition: box-shadow 0.15s, transform 0.15s;
+  &:hover:not(:disabled) {
+    box-shadow:
+      0 0 22px rgba(34, 228, 255, 0.8),
+      0 0 4px rgba(34, 228, 255, 1);
+  }
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+}
+
+/* Botão secundário com contorno */
+@utility btn-ghost {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(17, 22, 38, 0.6);
+  transition: border-color 0.15s, box-shadow 0.15s, color 0.15s;
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 10px rgba(34, 228, 255, 0.25);
+  }
+}
+
+/* Rótulo de seção estilo HUD */
+@utility hud-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+/* Cursor piscando do logo */
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.cursor-blink {
+  animation: blink 1.1s steps(1) infinite;
+}
+
+/* ---------- Canvas (React Flow) ---------- */
 .react-flow {
-  --xy-background-color: var(--bg);
-  --xy-edge-stroke: #5b6472;
-  --xy-edge-stroke-selected: var(--accent);
+  --xy-background-color: transparent;
+  --xy-edge-stroke: #3a4a78;
+  --xy-edge-stroke-width: 1.6;
+  --xy-edge-stroke-selected: var(--accent-2);
   --xy-handle-background-color: var(--accent);
   --xy-handle-border-color: var(--bg);
   --xy-controls-button-background-color: var(--panel-2);
-  --xy-controls-button-color: var(--text);
+  --xy-controls-button-background-color-hover: #19203a;
+  --xy-controls-button-color: var(--accent);
+  --xy-controls-button-color-hover: var(--text);
   --xy-controls-button-border-color: var(--border);
-  --xy-minimap-background-color: var(--panel);
+  --xy-minimap-background-color: rgba(11, 14, 23, 0.9);
+  --xy-minimap-mask-background-color: rgba(5, 6, 11, 0.6);
+  --xy-node-boxshadow-selected: none;
+  --xy-attribution-background-color: transparent;
 }
 
+.react-flow__controls {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.react-flow__minimap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.react-flow__attribution a {
+  color: var(--muted);
+}
+
+/* Arestas: com tráfego viram um fluxo neon tracejado */
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 3px rgba(34, 228, 255, 0.8));
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  filter: drop-shadow(0 0 4px rgba(255, 60, 172, 0.9));
+}
+
+/* Bolinhas de conexão pequenas e luminosas */
+.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 6px var(--accent);
+}
+
+/* Nó fora do ar: o tile pulsa quando o componente caiu */
+@keyframes node-down {
+  0%,
+  100% {
+    box-shadow:
+      0 0 10px rgba(255, 77, 109, 0.55),
+      inset 0 0 14px rgba(255, 77, 109, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 26px rgba(255, 77, 109, 0.95),
+      inset 0 0 22px rgba(255, 77, 109, 0.45);
+  }
+}
+.node-tile-down {
+  animation: node-down 1.2s ease-in-out infinite;
+}
+
+/* ---------- Formulários ---------- */
 input,
 select,
 textarea {
-  background: var(--panel-2);
+  background: #0a0e1a;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 8px;
   color: var(--text);
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 1px solid var(--accent);
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 10px rgba(34, 228, 255, 0.35);
+}
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* ---------- uPlot ---------- */
+.uplot,
+.u-legend {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+/* Barras de rolagem discretas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #26304f transparent;
 }

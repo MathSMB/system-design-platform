@@ -61,7 +61,7 @@ function layout(graph: Graph): SysNode[] {
     return {
       id: n.id,
       type: "system",
-      position: { x: 60 + d * 230, y: 60 + row * 130 },
+      position: { x: 60 + d * 230, y: 60 + row * 150 },
       data: { kind: n.kind, label: n.label ?? KIND_LABEL[n.kind], params: { ...n.params } },
     };
   });

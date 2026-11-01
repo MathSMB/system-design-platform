@@ -26,9 +26,9 @@ export function ResultsPanel() {
     <div className="flex flex-col gap-4 text-sm">
       <div className="grid grid-cols-4 gap-2">
         {cards.map((c) => (
-          <div key={c.label} className="rounded-md border border-border bg-panel-2 p-2">
+          <div key={c.label} className="panel p-2">
             <div className="font-mono text-[10px] uppercase text-muted">{c.label}</div>
-            <div className={`font-mono text-base ${c.bad ? "text-bad" : "text-text"}`}>{c.value}</div>
+            <div className={`font-mono text-base ${c.bad ? "text-bad glow" : "text-accent"}`}>{c.value}</div>
           </div>
         ))}
       </div>
@@ -42,7 +42,7 @@ export function ResultsPanel() {
         <p key={w} className="text-xs text-warn">{w}</p>
       ))}
       <div>
-        <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted">Onde quebrou</div>
+        <div className="mb-1 hud-label">Onde quebrou</div>
         <ul className="flex list-disc flex-col gap-1 pl-4 text-muted">
           {r.diagnosis.map((d, i) => (
             <li key={i}><Bold text={d} /></li>
