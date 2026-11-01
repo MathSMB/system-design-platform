@@ -26,9 +26,10 @@ export function DesignsBar() {
 
   async function refresh() {
     const res = await fetch("/api/designs").catch(() => null);
-    if (res?.ok) {
+    const body: { db?: boolean; items?: Item[] } | null = res?.ok ? await res.json().catch(() => null) : null;
+    if (body?.db) {
       setMode("db");
-      setItems(await res.json());
+      setItems(body.items ?? []);
     } else {
       setMode("local");
       setItems(Object.entries(readLocal()).map(([id, v]) => ({ id, name: v.name })));

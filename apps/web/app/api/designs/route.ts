@@ -5,11 +5,12 @@ import { designs } from "@/lib/db/schema";
 
 const noDb = () => NextResponse.json({ error: "DATABASE_URL não configurada." }, { status: 503 });
 
+/** Lista os desenhos. Sem banco, responde db: false para o app salvar no navegador. */
 export async function GET() {
   const db = getDb();
-  if (!db) return noDb();
-  const rows = await db.select({ id: designs.id, name: designs.name }).from(designs).orderBy(desc(designs.updatedAt)).limit(50);
-  return NextResponse.json(rows);
+  if (!db) return NextResponse.json({ db: false, items: [] });
+  const items = await db.select({ id: designs.id, name: designs.name }).from(designs).orderBy(desc(designs.updatedAt)).limit(50);
+  return NextResponse.json({ db: true, items });
 }
 
 export async function POST(req: Request) {
