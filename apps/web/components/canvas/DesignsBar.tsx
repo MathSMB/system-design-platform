@@ -73,7 +73,7 @@ export function DesignsBar() {
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1" data-tour="designs">
       <div className="mb-1 hud-label">Meus desenhos</div>
       <button onClick={save} className="btn-ghost px-2 py-1 text-xs">Salvar desenho</button>
       {msg && <span className="text-[11px] text-muted">{msg}</span>}

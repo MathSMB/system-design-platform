@@ -413,3 +413,20 @@ input[type="checkbox"] {
     transform: translateX(300%);
   }
 }
+
+/* Tour: o "buraco" iluminado é a sombra gigante em volta do elemento destacado */
+.tour-spot {
+  box-shadow:
+    0 0 0 9999px rgba(2, 3, 8, 0.8),
+    0 0 24px rgba(34, 228, 255, 0.6),
+    inset 0 0 14px rgba(34, 228, 255, 0.25);
+  animation: tour-pulse 1.8s ease-in-out infinite;
+}
+@keyframes tour-pulse {
+  50% {
+    box-shadow:
+      0 0 0 9999px rgba(2, 3, 8, 0.8),
+      0 0 36px rgba(34, 228, 255, 0.9),
+      inset 0 0 18px rgba(34, 228, 255, 0.35);
+  }
+}

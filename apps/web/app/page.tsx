@@ -20,7 +20,8 @@ export default function Home() {
       </p>
       <div className="mt-6 flex gap-3">
         <Link href="/canvas" className="btn-neon px-4 py-2 text-sm">▶ Abrir o canvas</Link>
-        <Link href="/concorrencia" className="btn-ghost px-4 py-2 text-sm font-semibold uppercase tracking-wider">Race conditions</Link>
+        <Link href="/treinos" className="btn-ghost px-4 py-2 text-sm font-semibold uppercase tracking-wider">Treinos guiados</Link>
+        <Link href="/canvas?tour=1" className="btn-ghost px-4 py-2 text-sm font-semibold uppercase tracking-wider">Como funciona?</Link>
       </div>
       </div>
       <HeroFlow />

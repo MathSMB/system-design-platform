@@ -26,6 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </Link>
           <nav className="flex gap-5 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
             <Link href="/canvas" className="transition-colors hover:text-accent">Canvas de carga</Link>
+            <Link href="/treinos" className="transition-colors hover:text-accent" data-tour="nav-treinos">Treinos</Link>
+            <Link href="/desafio" className="transition-colors hover:text-accent-2">Desafio</Link>
             <Link href="/concorrencia" className="transition-colors hover:text-accent">Concorrência</Link>
           </nav>
           {/* linha neon sob o cabeçalho */}
