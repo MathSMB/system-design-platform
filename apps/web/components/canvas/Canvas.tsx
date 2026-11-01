@@ -1,6 +1,6 @@
 "use client";
 
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, MarkerType, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
 import { PRESETS, type NodeKind } from "@sdp/sim-engine";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, type DragEvent } from "react";
@@ -10,14 +10,16 @@ import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
 import { ResultsPanel } from "./ResultsPanel";
 import { SystemNode } from "./SystemNode";
+import { TrafficEdge } from "./TrafficEdge";
 import { useCanvas } from "./store";
 import { useSimulation } from "./useSimulation";
 
 const nodeTypes = { system: SystemNode };
+const edgeTypes = { traffic: TrafficEdge };
+const ARROW_END = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#3f6f8f" };
 
 function Board() {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, select } = useCanvas();
-  const result = useCanvas((s) => s.result);
   const layoutVersion = useCanvas((s) => s.layoutVersion);
   const { screenToFlowPosition, fitView } = useReactFlow();
 
@@ -33,14 +35,15 @@ function Board() {
     if (kind) addNode(kind, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
   };
 
-  // arestas animadas quando há tráfego simulado
-  const styledEdges = edges.map((e) => ({ ...e, animated: !!result }));
+  // toda aresta mostra o tráfego com setinhas andando (TrafficEdge)
+  const styledEdges = edges.map((e) => ({ ...e, type: "traffic", markerEnd: ARROW_END }));
 
   return (
     <ReactFlow
       nodes={nodes}
       edges={styledEdges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
@@ -48,7 +51,7 @@ function Board() {
       onPaneClick={() => select(null)}
       onDrop={onDrop}
       onDragOver={(e) => e.preventDefault()}
-      defaultEdgeOptions={{ type: "smoothstep" }}
+      defaultEdgeOptions={{ type: "traffic" }}
       colorMode="dark"
       fitView
       deleteKeyCode={["Delete", "Backspace"]}
@@ -91,6 +94,11 @@ export function Canvas() {
         <ReactFlowProvider>
           <Board />
         </ReactFlowProvider>
+        {running && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <div className="scanline absolute inset-0" />
+          </div>
+        )}
         <div className="panel absolute left-3 top-3 flex items-center gap-2 p-2 text-sm backdrop-blur">
           <span className="text-muted">Duração</span>
           <input type="number" className="w-16" min={5} max={600} value={durationSec} onChange={(e) => set({ durationSec: Number(e.target.value) })} />

@@ -161,11 +161,17 @@ body {
   color: var(--muted);
 }
 
-/* Arestas: com tráfego viram um fluxo neon tracejado */
-.react-flow__edge.animated .react-flow__edge-path {
-  stroke: var(--accent);
-  stroke-width: 2;
-  filter: drop-shadow(0 0 3px rgba(34, 228, 255, 0.8));
+/* Arestas: o tracejado corre no sentido do tráfego (as setinhas são do TrafficEdge) */
+.react-flow__edge-path {
+  animation: dash-flow 1.2s linear infinite;
+}
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+.edge-block {
+  animation: blink 0.9s steps(1) infinite;
 }
 .react-flow__edge.selected .react-flow__edge-path {
   filter: drop-shadow(0 0 4px rgba(255, 60, 172, 0.9));
@@ -230,4 +236,180 @@ input[type="checkbox"] {
 * {
   scrollbar-width: thin;
   scrollbar-color: #26304f transparent;
+}
+
+/* ---------- Animações dos nós ---------- */
+
+/* Fogo do componente sobrecarregado */
+.flame {
+  color: #ffb547;
+  fill: #ff5a1f;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 0 6px #ff7a1a) drop-shadow(0 0 12px rgba(255, 60, 30, 0.7));
+  animation: flame 0.55s ease-in-out infinite alternate;
+}
+@keyframes flame {
+  0% {
+    transform: scale(1, 1) skewX(0deg);
+    opacity: 0.9;
+  }
+  40% {
+    transform: scale(0.92, 1.12) skewX(-4deg);
+  }
+  100% {
+    transform: scale(1.06, 0.92) skewX(5deg);
+    opacity: 1;
+  }
+}
+
+/* Tile esquentando (gargalo) */
+.heat {
+  animation: heat 1.4s ease-in-out infinite;
+}
+@keyframes heat {
+  50% {
+    filter: brightness(1.25) saturate(1.3);
+  }
+}
+
+/* Anel de radar saindo do nó com tráfego */
+.ping-ring {
+  animation: ping-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes ping-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Requisições perdidas sobem como "dano" */
+.damage {
+  text-shadow: 0 0 6px var(--down);
+  animation: damage 1.6s ease-out infinite;
+}
+@keyframes damage {
+  0% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-22px);
+    opacity: 0;
+  }
+}
+
+/* Componente fora do ar treme como tela com defeito */
+.glitch {
+  animation:
+    node-down 1.2s ease-in-out infinite,
+    glitch 2.4s steps(1) infinite;
+}
+@keyframes glitch {
+  0%,
+  86%,
+  100% {
+    transform: translate(0, 0);
+  }
+  88% {
+    transform: translate(-3px, 1px) skewX(6deg);
+  }
+  90% {
+    transform: translate(3px, -1px) skewX(-6deg);
+  }
+  92% {
+    transform: translate(-1px, 0);
+  }
+}
+
+.blink-warn {
+  animation: blink 1s steps(1) infinite;
+}
+
+/* ---------- Animações gerais ---------- */
+
+/* Entrada suave (cards de resultado, linhas da linha do tempo) */
+.pop-in {
+  animation: pop-in 0.35s ease-out both;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+/* Valor ruim pulsando */
+.pulse-bad {
+  animation: pulse-bad 1.4s ease-in-out infinite;
+}
+@keyframes pulse-bad {
+  50% {
+    box-shadow: 0 0 16px rgba(255, 77, 109, 0.45);
+    border-color: var(--down);
+  }
+}
+
+/* Faixa de varredura no canvas enquanto simula */
+.scanline {
+  background: linear-gradient(180deg, transparent, rgba(34, 228, 255, 0.12) 45%, rgba(34, 228, 255, 0.35) 50%, transparent 52%);
+  animation: scan 1.6s linear infinite;
+}
+@keyframes scan {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* Botão bloqueado treme quando a transação espera um lock */
+.shake {
+  animation: shake 2s ease-in-out infinite;
+}
+@keyframes shake {
+  0%,
+  80%,
+  100% {
+    transform: translateX(0);
+  }
+  84% {
+    transform: translateX(-2px);
+  }
+  88% {
+    transform: translateX(2px);
+  }
+  92% {
+    transform: translateX(-1px);
+  }
+}
+
+/* Quem prefere menos movimento (configuração do sistema) vê tudo parado */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+.loading-bar {
+  animation: loading 1s ease-in-out infinite;
+}
+@keyframes loading {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
 }

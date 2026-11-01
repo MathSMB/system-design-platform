@@ -69,7 +69,7 @@ export function RaceLab() {
                   <button
                     disabled={!canStep[i]}
                     onClick={() => setRun(stepTx(scenario, run, i)!)}
-                    className="btn-neon px-2 py-1 text-[11px] disabled:opacity-30"
+                    className={`btn-neon px-2 py-1 text-[11px] disabled:opacity-30 ${!st.done && !canStep[i] ? "shake" : ""}`}
                   >
                     {st.done ? "terminou" : canStep[i] ? "Avançar ▶" : "bloqueada 🔒"}
                   </button>
@@ -81,6 +81,7 @@ export function RaceLab() {
                       key={j}
                       className={`rounded px-2 py-1 ${j === st.pc && !st.done ? "bg-accent/15 text-text" : j < st.pc || st.done ? "text-muted line-through decoration-muted/40" : "text-muted"}`}
                     >
+                      {j === st.pc && !st.done && <span className="cursor-blink mr-1 text-accent">▸</span>}
                       {s.label}
                     </li>
                   ))}
@@ -98,7 +99,7 @@ export function RaceLab() {
         </div>
 
         {summary && (
-          <div className={`rounded-lg border p-3 text-sm ${summary.violations ? "border-bad/60 bg-bad/10" : "border-ok/50 bg-ok/10"}`}>
+          <div className={`pop-in rounded-lg border p-3 text-sm ${summary.violations ? "border-bad/60 bg-bad/10" : "border-ok/50 bg-ok/10"}`}>
             <div className="font-medium">
               {summary.violations
                 ? `Em ${summary.violations} de ${summary.total} ordens possíveis a regra quebra${summary.deadlocks ? ` (${summary.deadlocks} com deadlock)` : ""}.`
@@ -122,7 +123,7 @@ export function RaceLab() {
               <table className="w-full font-mono text-xs">
                 <tbody>
                   {run.trace.map((t, k) => (
-                    <tr key={k} className="align-top">
+                    <tr key={k} className="pop-in align-top">
                       <td className="pr-2 text-muted">{k + 1}</td>
                       <td className={`pr-2 ${LANE_COLORS[t.tx]}`}>{scenario.txs[t.tx]!.name}</td>
                       <td className="pr-2">{t.label}</td>
@@ -133,9 +134,9 @@ export function RaceLab() {
               </table>
             )}
             {verdict && (
-              <div className={`mt-3 rounded-md p-2 text-sm ${verdict.ok ? "bg-ok/10 text-ok" : "bg-bad/10 text-bad"}`}>{verdict.message}</div>
+              <div className={`pop-in mt-3 rounded-md p-2 text-sm ${verdict.ok ? "bg-ok/10 text-ok" : "bg-bad/10 text-bad"}`}>{verdict.message}</div>
             )}
-            {deadlock && <div className="mt-3 rounded-md bg-down/10 p-2 text-sm text-down">Deadlock: cada transação espera um lock que a outra segura.</div>}
+            {deadlock && <div className="pulse-bad mt-3 rounded-md border border-down/40 bg-down/10 p-2 text-sm text-down">Deadlock: cada transação espera um lock que a outra segura.</div>}
           </div>
 
           <div className="panel p-3 font-mono text-xs">

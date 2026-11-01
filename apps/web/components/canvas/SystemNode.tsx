@@ -3,6 +3,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { baseRps } from "@sdp/sim-engine";
 import type { ClientParams, NodeStatus } from "@sdp/sim-engine";
+import { AlertTriangle, Flame } from "lucide-react";
 import { memo, type CSSProperties } from "react";
 import { KIND_COLOR, KIND_GLYPH } from "./icons";
 import { useCanvas, type SysNode } from "./store";
@@ -36,6 +37,11 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
   }
   const replicas = data.kind === "database" ? Number(data.params.readReplicas ?? 0) : 0;
   const lag = metrics?.replicationLag;
+  const rejectRate = metrics && metrics.arrivals > 0 ? metrics.rejected / metrics.arrivals : 0;
+  // fogo: 1 chama quando vira gargalo, 2 quando rejeita mais de 5%, 3 quando rejeita mais de 20%
+  const flames = status === "bad" ? (rejectRate > 0.2 ? 3 : rejectRate > 0.05 ? 2 : 1) : 0;
+  const hasTraffic = !!metrics && metrics.arrivals > 0 && status !== "down";
+  const pingSec = metrics ? Math.max(0.7, 2.4 - metrics.utilization * 1.6) : 2;
   const usage = metrics && data.kind !== "client" && data.kind !== "loadBalancer" && data.kind !== "queue" ? Math.min(1, metrics.utilization) : null;
 
   const tileStyle: CSSProperties = {
@@ -51,6 +57,30 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
   return (
     <div style={{ width: W }} className="group relative flex flex-col items-center">
       <div className="relative" style={{ width: TILE, height: TILE }}>
+        {/* fogo saindo do componente sobrecarregado */}
+        {flames > 0 && (
+          <div className="pointer-events-none absolute -top-7 left-1/2 flex -translate-x-1/2 items-end">
+            {Array.from({ length: flames }, (_, i) => (
+              <Flame
+                key={i}
+                size={i === Math.floor(flames / 2) ? 26 : 18}
+                className="flame"
+                style={{ animationDelay: `${i * 0.17}s`, marginInline: -3 }}
+                strokeWidth={2}
+              />
+            ))}
+          </div>
+        )}
+        {/* radar: anel que se expande a cada "batida"; bate mais rápido quanto mais ocupado */}
+        {hasTraffic && (
+          <div className="ping-ring pointer-events-none absolute inset-0 rounded-xl border-2" style={{ borderColor: color, animationDuration: `${pingSec}s` }} />
+        )}
+        {/* requisições perdidas sobem do nó como dano em jogo */}
+        {metrics && metrics.rejected > 0 && status !== "down" && (
+          <div className="damage pointer-events-none absolute -right-10 top-0 font-display text-[9px] text-down">
+            −{compact(metrics.rejected)}
+          </div>
+        )}
         {/* réplicas de leitura aparecem como cópias empilhadas atrás do banco */}
         {Array.from({ length: Math.min(replicas, 3) }, (_, i) => (
           <div
@@ -60,14 +90,20 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
           />
         ))}
         <div
-          className={`relative flex items-center justify-center rounded-xl border-2 bg-[linear-gradient(160deg,#141a2e,#070a12)] transition-shadow ${status === "down" ? "node-tile-down" : ""}`}
+          className={`relative flex items-center justify-center rounded-xl border-2 bg-[linear-gradient(160deg,#141a2e,#070a12)] transition-shadow ${status === "down" ? "node-tile-down glitch" : ""} ${status === "bad" ? "heat" : ""}`}
           style={tileStyle}
         >
-          <Icon size={30} strokeWidth={1.75} style={{ filter: `drop-shadow(0 0 4px ${color})` }} />
+          <Icon size={30} strokeWidth={1.75} style={{ filter: `drop-shadow(0 0 4px ${color})`, opacity: status === "down" ? 0.55 : 1 }} />
+          {status === "down" && (
+            <svg className="pointer-events-none absolute inset-0" viewBox="0 0 64 64">
+              <path d="M 14 50 L 50 14" stroke="var(--down)" strokeWidth={3} strokeLinecap="round" />
+            </svg>
+          )}
+          {status === "warn" && <AlertTriangle size={16} className="blink-warn absolute -left-2 -top-2 fill-bg text-warn" strokeWidth={2.4} />}
           {selected && <div className="pointer-events-none absolute -inset-[7px] rounded-[15px] border border-dashed border-accent-2" />}
           {failing && (
             <div className="absolute -right-2 -top-2 rounded-sm bg-down px-1 font-mono text-[9px] font-bold leading-4 text-bg shadow-[0_0_8px_var(--down)]">
-              {status === "down" ? "OFF" : "!"}
+              {status === "down" ? "OFFLINE" : "!"}
             </div>
           )}
           {replicas > 0 && (
@@ -96,6 +132,11 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
       <Handle type="source" position={Position.Right} style={{ top: TILE / 2, right: inset }} />
     </div>
   );
+}
+
+/** 96611 → "96,6k" */
+function compact(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: n >= 10_000 ? 0 : 1 })}k` : String(n);
 }
 
 export const SystemNode = memo(SystemNodeImpl);
