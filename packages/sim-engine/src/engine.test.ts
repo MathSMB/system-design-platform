@@ -129,3 +129,88 @@ describe("comportamento", () => {
     expect(validateGraph(g).join(" ")).toContain("ciclo");
   });
 });
+
+describe("réplicas de leitura e replication lag", () => {
+  const db = (extra: Record<string, number>) => ({
+    id: "db",
+    kind: "database" as const,
+    params: { workers: 20, serviceTimeMs: 10, distribution: "exponential" as const, queueCapacity: 1e9, ...extra },
+  });
+  const graph = (client: ReturnType<typeof clientAt>, dbParams: Record<string, number>): Graph => ({
+    nodes: [client, db(dbParams)],
+    edges: [{ id: "e", source: "users", target: "db" }],
+  });
+  const withWrites = (rps: number, writeRatio: number, readAfterWriteMs = 0) => {
+    const c = clientAt(rps);
+    return { ...c, params: { ...c.params, writeRatio, readAfterWriteMs } };
+  };
+
+  it("sem escritas, as leituras se dividem igualmente entre as réplicas e o primário fica livre", () => {
+    // 1.000 leituras/s × 10 ms = 10 workers ocupados no total; 2 réplicas de 20 workers ⇒ 25% cada
+    const r = simulate(graph(clientAt(1000), { readReplicas: 2 }), { durationSec: 120, seed: 1, warmupSec: 5 });
+    const m = r.nodes.find((n) => n.nodeId === "db")!;
+    expect(m.utilization).toBeLessThan(0.01);
+    expect(m.replicaUtilization!).toBeGreaterThan(0.23);
+    expect(m.replicaUtilization!).toBeLessThan(0.27);
+    expect(r.consistency.staleReads).toBe(0);
+  });
+
+  it("sem réplicas, escrita síncrona: quem escreve sempre lê a própria escrita", () => {
+    const r = simulate(graph(withWrites(500, 0.2, 50), {}), { durationSec: 60, seed: 2 });
+    expect(r.consistency.dbReads).toBeGreaterThan(0);
+    expect(r.consistency.staleReads).toBe(0);
+  });
+
+  it("lag maior que o tempo até reler: a leitura logo depois de escrever volta velha", () => {
+    // escrita confirmada, 50 ms depois o usuário relê numa réplica que só recebe a escrita após 200 ms
+    const r = simulate(graph(withWrites(500, 0.2, 50), { readReplicas: 2, replicationDelayMs: 200 }), {
+      durationSec: 60,
+      seed: 3,
+    });
+    const writes = 500 * 0.2 * 60;
+    // praticamente toda releitura é velha (≈ uma por escrita)
+    expect(r.consistency.staleReads).toBeGreaterThan(writes * 0.9);
+    expect(r.consistency.staleReads).toBeLessThan(writes * 1.05);
+    const lag = r.nodes.find((n) => n.nodeId === "db")!.replicationLag!;
+    // lag = atraso de rede + replay (0,5 ms por escrita)
+    expect(lag.avgMs).toBeGreaterThan(200);
+    expect(lag.avgMs).toBeLessThan(205);
+  });
+
+  it("read-your-writes: ler do primário logo depois de escrever elimina a leitura velha", () => {
+    const r = simulate(
+      graph(withWrites(500, 0.2, 50), { readReplicas: 2, replicationDelayMs: 200, readYourWritesMs: 1000 }),
+      { durationSec: 60, seed: 3 },
+    );
+    expect(r.consistency.staleReads).toBe(0);
+  });
+
+  it("escrita mais rápida que o replay de uma thread: o lag cresce sem limite", () => {
+    // replay = 10 ms × 5% = 0,5 ms ⇒ a réplica aplica no máximo 2.000 escritas/s
+    const big = { workers: 200, readReplicas: 1, replicationDelayMs: 1 };
+    const ok = simulate(graph(withWrites(1500, 1), big), { durationSec: 20, seed: 4 });
+    const over = simulate(graph(withWrites(3000, 1), big), { durationSec: 20, seed: 4 });
+    const lagOk = ok.nodes[0]!.replicationLag!;
+    const lagOver = over.nodes[0]!.replicationLag!;
+    expect(lagOk.maxMs).toBeLessThan(100);
+    // λ = 3.000/s, μ = 2.000/s: no fim (T = 20 s) a escrita mais antiga ainda não aplicada
+    // foi commitada em t0 com λ·t0 = μ·T ⇒ lag = T·(1 − μ/λ) ≈ 6,67 s
+    expect(lagOver.maxMs).toBeGreaterThan(6667 * 0.92);
+    expect(lagOver.maxMs).toBeLessThan(6667 * 1.08);
+    expect(over.diagnosis.some((d) => d.includes("replication lag"))).toBe(true);
+  });
+});
+
+describe("trilha: réplicas de leitura", () => {
+  it("mostra leitura velha e o read-your-writes corrige", () => {
+    const base = PRESETS.readReplicas!.graph;
+    const r = simulate(base, { durationSec: 20, seed: 42, warmupSec: 2 });
+    expect(r.consistency.staleReads).toBeGreaterThan(0);
+    const fixed = structuredClone(base);
+    const db = fixed.nodes.find((n) => n.kind === "database")!;
+    if (db.kind === "database") db.params.readYourWritesMs = 2000;
+    const r2 = simulate(fixed, { durationSec: 20, seed: 42, warmupSec: 2 });
+    expect(r2.consistency.staleReads).toBe(0);
+    expect(r2.errorRate).toBe(0);
+  });
+});

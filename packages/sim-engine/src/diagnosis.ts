@@ -3,12 +3,29 @@ import type { Graph, NodeKind, NodeMetrics, NodeStatus, SimResult } from "./type
 
 const fmtPct = (x: number) => `${Math.round(x * 100)}%`;
 const fmtInt = (x: number) => Math.round(x).toLocaleString("pt-BR");
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} s` : `${Math.round(ms)} ms`);
+
+/** "utilização de 90%" ou, com réplicas, "primário em 40%, réplicas até 90%". */
+function utilText(m: NodeMetrics): string {
+  if (m.replicaUtilization === undefined) return `utilização de ${fmtPct(m.utilization)}`;
+  return `primário em ${fmtPct(m.utilization)}, réplicas até ${fmtPct(m.replicaUtilization)}`;
+}
+
+function adviceFor(m: NodeMetrics): string {
+  if (m.kind === "database" && m.replicaUtilization !== undefined) {
+    return m.replicaUtilization > m.utilization
+      ? "As réplicas de leitura estão saturadas: adicione réplicas ou coloque um cache na frente."
+      : "O primário recebe todas as escritas (e as leituras de read-your-writes). Réplicas não aliviam escrita: use fila/lote, otimize a query ou, em último caso, sharding.";
+  }
+  return ADVICE[m.kind] ?? "";
+}
 
 export function nodeStatus(m: NodeMetrics, down: boolean): NodeStatus {
   if (down) return "down";
   const rejectRate = m.arrivals > 0 ? m.rejected / m.arrivals : 0;
-  if (m.utilization >= 0.85 || rejectRate > 0.01) return "bad";
-  if (m.utilization >= 0.7 || rejectRate > 0) return "warn";
+  const util = Math.max(m.utilization, m.replicaUtilization ?? 0);
+  if (util >= 0.85 || rejectRate > 0.01) return "bad";
+  if (util >= 0.7 || rejectRate > 0) return "warn";
   return "ok";
 }
 
@@ -47,17 +64,39 @@ export function diagnose(graph: Graph, r: SimResult): string[] {
     .filter((m) => m.status === "bad")
     .sort((a, b) => b.utilization - a.utilization);
   for (const m of bad) {
-    const parts = [`utilização de ${fmtPct(m.utilization)}`];
+    const parts = [utilText(m)];
     if (m.rejected > 0) parts.push(`${fmtInt(m.rejected)} requisições rejeitadas`);
     if (m.maxQueue > 0) parts.push(`fila chegou a ${fmtInt(m.maxQueue)}`);
     out.push(
-      `**${label(m.nodeId)}** é um gargalo (${parts.join(", ")}). Perto de 100% de utilização a fila cresce sem limite e a latência explode. ${ADVICE[m.kind] ?? ""}`.trim(),
+      `**${label(m.nodeId)}** é um gargalo (${parts.join(", ")}). Perto de 100% de utilização a fila cresce sem limite e a latência explode. ${adviceFor(m)}`.trim(),
     );
   }
 
   const warn = r.nodes.filter((m) => m.status === "warn");
   for (const m of warn) {
-    out.push(`**${label(m.nodeId)}** opera com pouca folga (${fmtPct(m.utilization)}). Um pico pode derrubá-lo.`);
+    out.push(`**${label(m.nodeId)}** opera com pouca folga (${utilText(m)}). Um pico pode derrubá-lo.`);
+  }
+
+  for (const m of r.nodes) {
+    if (m.replicationLag && m.replicationLag.maxMs > 1000) {
+      out.push(
+        `O **replication lag** de **${label(m.nodeId)}** chegou a ${fmtMs(m.replicationLag.maxMs)}. A réplica aplica as escritas numa thread só; quando o primário escreve mais rápido do que ela consegue aplicar, o atraso cresce sem parar. Diminua o volume de escrita (lote, fila) ou use réplicas com mais capacidade.`,
+      );
+    }
+  }
+
+  const { dbReads, staleReads } = r.consistency;
+  if (staleReads > 0) {
+    const lagged = r.nodes.filter((m) => (m.staleReads ?? 0) > 0 && m.replicationLag);
+    const cause = lagged.length
+      ? `ela foi para uma réplica que ainda não tinha recebido a escrita (lag médio de ${fmtMs(lagged[0]!.replicationLag!.avgMs)})`
+      : "a escrita foi confirmada antes de ser gravada no banco (ex.: ainda estava na fila)";
+    const fix = lagged.length
+      ? "Correções: ler do primário por alguns segundos depois de escrever (read-your-writes), fixar a sessão no primário, ou esperar a réplica alcançar a posição do WAL (LSN) da escrita."
+      : "Correções: mostrar a escrita a partir do que o usuário enviou (otimista) ou avisar que está processando.";
+    out.push(
+      `**${fmtInt(staleReads)} leituras (${fmtPct(staleReads / Math.max(1, dbReads))} das leituras no banco) devolveram dado velho**: o usuário escreveu e, ao ler logo depois, não viu a própria escrita, porque ${cause}. ${fix}`,
+    );
   }
 
   if (r.errors.timeout > 0) {

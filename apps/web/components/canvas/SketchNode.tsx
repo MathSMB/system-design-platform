@@ -53,7 +53,12 @@ function SketchNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
     sub = `pico ≈ ${Math.round(baseRps(p) * p.peakFactor).toLocaleString("pt-BR")} req/s`;
   } else if (metrics && data.kind !== "loadBalancer") {
     sub = data.kind === "queue" ? `fila máx ${metrics.maxQueue.toLocaleString("pt-BR")}` : `${Math.round(metrics.utilization * 100)}% ocupado`;
+    if (metrics.replicaUtilization !== undefined) {
+      sub = `prim. ${Math.round(metrics.utilization * 100)}% · rép. ${Math.round(metrics.replicaUtilization * 100)}%`;
+    }
   }
+  const replicas = data.kind === "database" ? Number(data.params.readReplicas ?? 0) : 0;
+  const lag = metrics?.replicationLag;
 
   return (
     <div style={{ width: W, height: H }} className="relative">
@@ -67,6 +72,11 @@ function SketchNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
           {KIND_ICON[data.kind]} {data.label}
         </div>
         {sub && <div className="mt-0.5 font-mono text-[10px] text-muted">{sub}</div>}
+        {replicas > 0 && (
+          <div className={`font-mono text-[10px] ${lag && lag.maxMs > 1000 ? "text-bad" : "text-muted"}`}>
+            {lag ? `lag ${Math.round(lag.avgMs).toLocaleString("pt-BR")} ms` : `+${replicas} réplica${replicas > 1 ? "s" : ""}`}
+          </div>
+        )}
         {failing && <div className="mt-0.5 font-mono text-[10px] text-down">falha programada</div>}
       </div>
       {data.kind !== "client" && <Handle type="target" position={Position.Left} />}

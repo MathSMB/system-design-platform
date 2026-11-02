@@ -25,6 +25,8 @@ interface CanvasState {
   result: SimResult | null;
   running: boolean;
   error: string | null;
+  /** Muda sempre que um desenho inteiro é carregado, para o canvas reenquadrar. */
+  layoutVersion: number;
   onNodesChange(c: NodeChange<SysNode>[]): void;
   onEdgesChange(c: EdgeChange[]): void;
   onConnect(c: Connection): void;
@@ -76,6 +78,7 @@ export const useCanvas = create<CanvasState>((set, get) => ({
   result: null,
   running: false,
   error: null,
+  layoutVersion: 0,
 
   onNodesChange: (c) => set({ nodes: applyNodeChanges(c, get().nodes) }),
   onEdgesChange: (c) => set({ edges: applyEdgeChanges(c, get().edges) }),
@@ -117,9 +120,19 @@ export const useCanvas = create<CanvasState>((set, get) => ({
       result: null,
       selectedId: null,
       error: null,
+      layoutVersion: get().layoutVersion + 1,
     });
   },
-  loadDocument: (doc) => set({ nodes: doc.nodes, edges: doc.edges, problem: doc.problem, failures: [], result: null, selectedId: null }),
+  loadDocument: (doc) =>
+    set({
+      nodes: doc.nodes,
+      edges: doc.edges,
+      problem: doc.problem,
+      failures: [],
+      result: null,
+      selectedId: null,
+      layoutVersion: get().layoutVersion + 1,
+    }),
 
   toGraph: () => ({
     nodes: get().nodes.map((n) => ({ id: n.id, kind: n.data.kind, label: n.data.label, params: n.data.params }) as unknown as SimNode),

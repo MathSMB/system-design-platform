@@ -35,6 +35,13 @@ export interface ClientParams {
   pattern: "constant" | "ramp" | "spike";
   /** Tempo máximo que o usuário espera. Acima disso conta como timeout. */
   timeoutMs: number;
+  /** Fração das requisições que são escritas (0 a 1). Padrão 0: tudo leitura. */
+  writeRatio?: number;
+  /**
+   * Depois de uma escrita confirmada, o mesmo usuário lê de novo após este tempo, em ms
+   * (ex.: postar um comentário e a página recarregar). 0 ou ausente: não lê de volta.
+   */
+  readAfterWriteMs?: number;
 }
 
 export interface LoadBalancerParams {
@@ -63,13 +70,25 @@ export interface ExternalParams extends ProcessingParams {
   errorRate: number;
 }
 
+export interface DatabaseParams extends ProcessingParams {
+  /** Réplicas de leitura, cada uma com os mesmos workers do primário. Padrão 0. */
+  readReplicas?: number;
+  /** Atraso de rede da replicação (envio do WAL), em ms. O lag real soma o tempo de aplicar a escrita. */
+  replicationDelayMs?: number;
+  /**
+   * Read-your-writes: por quanto tempo depois de escrever o usuário lê do primário, em ms.
+   * 0 ou ausente: toda leitura vai para as réplicas.
+   */
+  readYourWritesMs?: number;
+}
+
 export type NodeParamsByKind = {
   client: ClientParams;
   loadBalancer: LoadBalancerParams;
   server: ServerParams;
   cache: CacheParams;
   cdn: CacheParams;
-  database: ProcessingParams;
+  database: DatabaseParams;
   queue: QueueParams;
   external: ExternalParams;
 };
@@ -124,6 +143,14 @@ export interface NodeMetrics {
   status: NodeStatus;
   hits?: number;
   misses?: number;
+  /** Banco com réplicas: utilização da réplica mais carregada (0 a 1). */
+  replicaUtilization?: number;
+  /** Banco com réplicas: atraso entre o commit no primário e a escrita aparecer na réplica. */
+  replicationLag?: { avgMs: number; p99Ms: number; maxMs: number };
+  /** Leituras que chegaram a este banco e devolveram dado sem a última escrita do próprio usuário. */
+  staleReads?: number;
+  /** Leituras que chegaram a este banco. */
+  reads?: number;
 }
 
 export interface TimelinePoint {
@@ -146,6 +173,8 @@ export interface SimResult {
   latency: { meanMs: number; p50Ms: number; p95Ms: number; p99Ms: number; maxMs: number };
   /** Requisições simultâneas em voo, em média (para checar a Lei de Little). */
   avgInFlight: number;
+  /** Consistência das leituras nos bancos: quantas viram dado velho (não incluíam a escrita do próprio usuário). */
+  consistency: { dbReads: number; staleReads: number };
   nodes: NodeMetrics[];
   timeline: TimelinePoint[];
   diagnosis: string[];

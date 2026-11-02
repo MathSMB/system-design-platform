@@ -20,6 +20,64 @@ type Reply = (ok: boolean, cause?: ErrorCause) => void;
 interface Req {
   id: number;
   start: number;
+  write: boolean;
+  /** Usuário que fez a requisição (só sorteado quando há escritas). */
+  user: number;
+  /** Escritas: instante do commit no primário. */
+  commitAt?: number;
+  /** Escritas: instante em que o usuário recebeu a confirmação. */
+  ackAt?: number;
+}
+
+/**
+ * Custo de aplicar uma escrita na réplica, como fração do tempo de serviço da query
+ * (aproximação: o replay aplica mudanças prontas, sem parse, plano ou locks).
+ * A réplica aplica o WAL numa thread só (como o processo de replay do PostgreSQL),
+ * então se o primário escreve mais rápido do que isso, o lag cresce sem limite.
+ */
+export const REPLAY_COST = 0.05;
+
+/** Réplica de leitura: workers próprios para leituras e uma thread de replay em FIFO. */
+class Replica {
+  /** Commit mais recente já aplicado (as escritas chegam na ordem do commit). */
+  appliedUpTo = -1;
+  lags: number[] = [];
+  private pending: number[] = [];
+  private head = 0;
+  private replaying = false;
+
+  constructor(
+    private sim: Simulation,
+    readonly station: Station,
+    private replayMs: number,
+  ) {}
+
+  /** Recebe uma escrita do primário (já descontado o atraso de rede). */
+  receive(commitAt: number): void {
+    this.pending.push(commitAt);
+    this.replay();
+  }
+
+  /** Commit mais antigo ainda não aplicado, ou undefined. */
+  oldestPending(): number | undefined {
+    return this.head < this.pending.length ? this.pending[this.head] : undefined;
+  }
+
+  private replay(): void {
+    if (this.replaying || this.head >= this.pending.length) return;
+    this.replaying = true;
+    this.sim.schedule(this.replayMs, () => {
+      const commitAt = this.pending[this.head++]!;
+      if (this.head > 1024 && this.head * 2 > this.pending.length) {
+        this.pending = this.pending.slice(this.head);
+        this.head = 0;
+      }
+      this.appliedUpTo = Math.max(this.appliedUpTo, commitAt);
+      this.lags.push(this.sim.now - commitAt);
+      this.replaying = false;
+      this.replay();
+    });
+  }
 }
 
 /**
@@ -103,6 +161,9 @@ interface NodeRuntime {
   misses: number;
   /** Maior profundidade da fila (nó queue). */
   maxQueue: number;
+  replicas?: Replica[];
+  reads: number;
+  staleReads: number;
   resume?: () => void;
   handle(req: Req, reply: Reply): void;
   onDown?(): void;
@@ -129,6 +190,8 @@ class Simulation {
   private errors = { timeout: 0, rejected: 0, unavailable: 0, dependency: 0 };
   private succeeded = 0;
   private completedAfterWarmup = 0;
+  /** Última escrita confirmada de cada usuário (para detectar leitura de dado velho). */
+  private lastAckedWrite = new Map<number, Req>();
   private buckets: { offered: number; ok: number; err: number; lat: number[] }[] = [];
 
   constructor(
@@ -194,6 +257,8 @@ class Simulation {
       hits: 0,
       misses: 0,
       maxQueue: 0,
+      reads: 0,
+      staleReads: 0,
       handle: () => {},
     };
     const deps = () => this.downstream.get(node.id) ?? [];
@@ -259,9 +324,48 @@ class Simulation {
       }
 
       case "database": {
-        const st = new Station(this, node.params);
+        const p = node.params;
+        const st = new Station(this, p);
         rt.station = st;
-        rt.handle = (_req, reply) => st.enter(() => reply(true), reject(reply));
+        const replicas = Array.from(
+          { length: Math.max(0, Math.floor(p.readReplicas ?? 0)) },
+          () => new Replica(this, new Station(this, p), p.serviceTimeMs * REPLAY_COST),
+        );
+        rt.replicas = replicas;
+        const delay = p.replicationDelayMs ?? 0;
+        const ryw = p.readYourWritesMs ?? 0;
+        let rr = 0;
+
+        // a leitura enxerga a última escrita confirmada do próprio usuário?
+        const isStale = (req: Req, replica?: Replica): boolean => {
+          const w = this.lastAckedWrite.get(req.user);
+          // só vale escrita confirmada antes de a leitura começar
+          if (!w || w.ackAt! > req.start) return false;
+          if (w.commitAt === undefined) return true; // confirmada, mas ainda não gravada (ex.: está na fila)
+          return replica ? w.commitAt > replica.appliedUpTo : false;
+        };
+        const read = (req: Req, reply: Reply, replica?: Replica) => {
+          (replica?.station ?? st).enter(() => {
+            rt.reads++;
+            if (isStale(req, replica)) rt.staleReads++;
+            reply(true);
+          }, reject(reply));
+        };
+
+        rt.handle = (req, reply) => {
+          if (req.write) {
+            st.enter(() => {
+              req.commitAt = this.now;
+              for (const r of replicas) this.schedule(delay, () => r.receive(req.commitAt!));
+              reply(true);
+            }, reject(reply));
+            return;
+          }
+          if (replicas.length === 0) return read(req, reply);
+          const w = this.lastAckedWrite.get(req.user);
+          if (ryw > 0 && w && req.start - w.ackAt! < ryw) return read(req, reply); // lê do primário
+          read(req, reply, replicas[rr++ % replicas.length]);
+        };
         break;
       }
 
@@ -282,7 +386,8 @@ class Simulation {
         rt.station = st;
         rt.handle = (req, reply) =>
           st.enter(() => {
-            if (this.rng() < node.params.hitRate) {
+            // escrita não é servida pelo cache: segue para a origem (e invalida a chave)
+            if (!req.write && this.rng() < node.params.hitRate) {
               rt.hits++;
               return reply(true);
             }
@@ -332,7 +437,10 @@ class Simulation {
 
     if (rt.station) {
       const st = rt.station;
-      rt.onDown = () => st.flush();
+      rt.onDown = () => {
+        st.flush();
+        for (const r of rt.replicas ?? []) r.station.flush();
+      };
     }
     return rt;
   }
@@ -345,6 +453,8 @@ class Simulation {
     const maxRps = base * p.peakFactor;
     if (maxRps <= 0) return;
     const third = this.endMs / 3;
+    const writeRatio = p.writeRatio ?? 0;
+    const users = Math.max(1, Math.floor(p.dailyActiveUsers));
     const rateAt = (t: number): number => {
       if (p.pattern === "ramp") return maxRps * (t / this.endMs);
       if (p.pattern === "spike") return t >= third && t < 2 * third ? maxRps : base;
@@ -354,7 +464,11 @@ class Simulation {
     const next = () => {
       this.schedule(sampleExponential(this.rng, 1000 / maxRps), () => {
         if (this.now >= this.endMs) return;
-        if (this.rng() * maxRps < rateAt(this.now)) this.issue(target, p);
+        if (this.rng() * maxRps < rateAt(this.now)) {
+          // só sorteia escrita/usuário quando há escritas, para não mudar desenhos só de leitura
+          if (writeRatio > 0) this.issue(target, p, this.rng() < writeRatio, Math.floor(this.rng() * users));
+          else this.issue(target, p, false, 0);
+        }
         next();
       });
     };
@@ -370,8 +484,8 @@ class Simulation {
     return this.buckets[Math.min(this.buckets.length - 1, Math.floor(t / 1000))]!;
   }
 
-  private issue(target: string, p: ClientParams): void {
-    const req: Req = { id: this.nextId++, start: this.now };
+  private issue(target: string, p: ClientParams, write: boolean, user: number): void {
+    const req: Req = { id: this.nextId++, start: this.now, write, user };
     this.trackInFlight();
     this.inFlight.set(req.id, req.start);
     this.bucket(this.now).offered++;
@@ -388,6 +502,16 @@ class Simulation {
         if (req.start >= this.warmupMs) {
           this.latencies.push(lat);
           this.completedAfterWarmup++;
+        }
+        if (req.write) {
+          req.ackAt = this.now;
+          this.lastAckedWrite.set(req.user, req);
+          const after = p.readAfterWriteMs ?? 0;
+          if (after > 0) {
+            this.schedule(after, () => {
+              if (this.now < this.endMs) this.issue(target, p, false, req.user);
+            });
+          }
         }
       } else {
         b.err++;
@@ -449,7 +573,7 @@ class Simulation {
         if (rt.station && "workers" in n.params) {
           utilization = rt.station.busyTimeMs / (n.params.workers * this.endMs);
           maxQueue = rt.station.maxQueue;
-          throughput = rt.station.served / durSec;
+          throughput = (rt.station.served + (rt.replicas ?? []).reduce((a, r) => a + r.station.served, 0)) / durSec;
         } else if (n.kind === "queue") {
           maxQueue = rt.maxQueue;
           utilization = n.params.capacity > 0 ? maxQueue / n.params.capacity : 0;
@@ -467,6 +591,25 @@ class Simulation {
         if (n.kind === "cache" || n.kind === "cdn") {
           m.hits = rt.hits;
           m.misses = rt.misses;
+        }
+        if (n.kind === "database") {
+          m.reads = rt.reads;
+          m.staleReads = rt.staleReads;
+        }
+        if (rt.replicas?.length && n.kind === "database") {
+          const workers = n.params.workers;
+          m.replicaUtilization = Math.max(...rt.replicas.map((r) => r.station.busyTimeMs / (workers * this.endMs)));
+          // escritas que ainda esperam replay no fim também contam como lag
+          const lags = rt.replicas.flatMap((r) => {
+            const oldest = r.oldestPending();
+            return oldest === undefined ? r.lags : [...r.lags, this.endMs - oldest];
+          });
+          const sorted = lags.sort((a, b) => a - b);
+          m.replicationLag = {
+            avgMs: sorted.length ? sorted.reduce((a, b) => a + b, 0) / sorted.length : 0,
+            p99Ms: percentile(sorted, 99),
+            maxMs: sorted.length ? sorted[sorted.length - 1]! : 0,
+          };
         }
         m.status = nodeStatus(m, this.isDownAtEnd(n.id));
         return m;
@@ -499,6 +642,10 @@ class Simulation {
         maxMs: lat.length ? lat[lat.length - 1]! : 0,
       },
       avgInFlight: this.inFlightArea / this.endMs,
+      consistency: {
+        dbReads: nodes.reduce((a, m) => a + (m.reads ?? 0), 0),
+        staleReads: nodes.reduce((a, m) => a + (m.staleReads ?? 0), 0),
+      },
       nodes,
       timeline,
       diagnosis: [],

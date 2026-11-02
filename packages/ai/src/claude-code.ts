@@ -5,6 +5,8 @@ import type { AiProvider, Evaluation, EvaluationInput } from "./types";
 export interface ClaudeCodeOptions {
   /** Caminho do executável. Padrão: "claude" (ou a variável CLAUDE_BIN). */
   bin?: string;
+  /** Argumentos antes dos do Claude Code (ex.: o script, quando bin é o node). */
+  binArgs?: string[];
   /** Modelo, ex. "opus" ou "sonnet". Padrão: o do Claude Code. */
   model?: string;
   timeoutMs?: number;
@@ -22,6 +24,7 @@ export class ClaudeCodeProvider implements AiProvider {
 
   async evaluate(input: EvaluationInput): Promise<Evaluation> {
     const args = [
+      ...(this.opts.binArgs ?? []),
       "-p",
       "--output-format",
       "json",

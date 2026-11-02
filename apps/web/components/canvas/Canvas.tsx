@@ -18,7 +18,14 @@ const nodeTypes = { system: SketchNode };
 function Board() {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, select } = useCanvas();
   const result = useCanvas((s) => s.result);
-  const { screenToFlowPosition } = useReactFlow();
+  const layoutVersion = useCanvas((s) => s.layoutVersion);
+  const { screenToFlowPosition, fitView } = useReactFlow();
+
+  // reenquadra quando uma trilha ou um desenho salvo é carregado
+  useEffect(() => {
+    const t = setTimeout(() => void fitView({ padding: 0.15, duration: 300 }), 50);
+    return () => clearTimeout(t);
+  }, [layoutVersion, fitView]);
 
   const onDrop = (e: DragEvent) => {
     e.preventDefault();

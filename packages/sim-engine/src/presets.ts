@@ -94,8 +94,37 @@ export const PRESETS: Record<string, { title: string; description: string; graph
       ],
     },
   },
+  readReplicas: {
+    title: "4. Réplicas de leitura",
+    description:
+      "Escritas no primário, leituras em 3 réplicas a 200 ms de atraso. Quem posta e recarrega não vê o próprio post: ligue o read-your-writes no banco.",
+    graph: {
+      nodes: [
+        { ...users(5_000_000), params: { ...users(5_000_000).params, writeRatio: 0.1, readAfterWriteMs: 100 } },
+        { id: "lb", kind: "loadBalancer", label: "LB", params: { algorithm: "leastOutstanding" } },
+        server("app1", "App 1", 64),
+        server("app2", "App 2", 64),
+        server("app3", "App 3", 64),
+        {
+          id: "db",
+          kind: "database",
+          label: "Postgres",
+          params: { workers: 50, serviceTimeMs: 15, queueCapacity: 1000, readReplicas: 3, replicationDelayMs: 200, readYourWritesMs: 0 },
+        },
+      ],
+      edges: [
+        { id: "e1", source: "users", target: "lb" },
+        { id: "e2", source: "lb", target: "app1" },
+        { id: "e3", source: "lb", target: "app2" },
+        { id: "e4", source: "lb", target: "app3" },
+        { id: "e5", source: "app1", target: "db" },
+        { id: "e6", source: "app2", target: "db" },
+        { id: "e7", source: "app3", target: "db" },
+      ],
+    },
+  },
   asyncQueue: {
-    title: "4. Escrita assíncrona com fila",
+    title: "5. Escrita assíncrona com fila",
     description: "O app confirma na hora e um worker grava depois. O usuário não espera pelo serviço lento.",
     graph: {
       nodes: [

@@ -74,13 +74,19 @@ function describeGraph(g: Graph): string {
 
 function describeSimulation(r: SimResult): string {
   const nodes = r.nodes
-    .map((n) => `- ${n.nodeId}: ${n.status}, utilização ${Math.round(n.utilization * 100)}%, rejeitadas ${n.rejected}, fila máx ${n.maxQueue}`)
+    .map((n) => {
+      let line = `- ${n.nodeId}: ${n.status}, utilização ${Math.round(n.utilization * 100)}%, rejeitadas ${n.rejected}, fila máx ${n.maxQueue}`;
+      if (n.replicaUtilization !== undefined) line += `, réplicas até ${Math.round(n.replicaUtilization * 100)}%`;
+      if (n.replicationLag) line += `, replication lag médio ${n.replicationLag.avgMs.toFixed(0)} ms (máx ${n.replicationLag.maxMs.toFixed(0)} ms)`;
+      return line;
+    })
     .join("\n");
   return [
     `Duração simulada: ${r.simulatedSec}s, ${r.totalRequests} requisições`,
     `Taxa de erro: ${(r.errorRate * 100).toFixed(2)}% (timeout ${r.errors.timeout}, rejeitadas ${r.errors.rejected}, indisponível ${r.errors.unavailable}, dependência ${r.errors.dependency})`,
     `Latência: p50 ${r.latency.p50Ms.toFixed(1)} ms, p95 ${r.latency.p95Ms.toFixed(1)} ms, p99 ${r.latency.p99Ms.toFixed(1)} ms`,
     `Por componente:\n${nodes}`,
+    `Leituras no banco: ${r.consistency?.dbReads ?? 0}, com dado velho (sem a escrita do próprio usuário): ${r.consistency?.staleReads ?? 0}`,
     `Diagnóstico automático:\n${r.diagnosis.map((d) => `- ${d}`).join("\n")}`,
   ].join("\n");
 }
