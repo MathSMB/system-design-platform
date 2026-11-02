@@ -73,9 +73,9 @@ export function DesignsBar() {
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="mb-1 font-mono text-[11px] uppercase tracking-wider text-muted">Meus desenhos</div>
-      <button onClick={save} className="rounded-md border border-border px-2 py-1 text-xs hover:border-accent">Salvar desenho</button>
+    <div className="flex flex-col gap-1" data-tour="designs">
+      <div className="mb-1 hud-label">Meus desenhos</div>
+      <button onClick={save} className="btn-ghost px-2 py-1 text-xs">Salvar desenho</button>
       {msg && <span className="text-[11px] text-muted">{msg}</span>}
       {items.map((i) => (
         <button key={i.id} onClick={() => open(i.id)} className="truncate text-left text-xs text-muted hover:text-text">{i.name}</button>

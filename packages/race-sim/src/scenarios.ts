@@ -1,4 +1,4 @@
-import type { DbState, Scenario, Verdict } from "./core";
+import { readOwn, type DbState, type Scenario, type Step, type Verdict } from "./core";
 import {
   atomicAdd,
   begin,
@@ -7,6 +7,12 @@ import {
   cacheSet,
   commit,
   emit,
+  appendEvent,
+  insertUnique,
+  loadStream,
+  redisGet,
+  redisSet,
+  redisSetNx,
   select,
   selectForUpdate,
   update,
@@ -163,6 +169,165 @@ export const SCENARIOS: Scenario[] = [
     },
   },
 ];
+
+const novo = (x: Record<string, number | null>) => x.p === 0;
+
+function creditInvariant(db: DbState): Verdict {
+  const saldo = v(db, "saldo") ?? 0;
+  return saldo === 100
+    ? { ok: true, message: "Correto: R$ 100 creditados uma vez." }
+    : { ok: false, message: `Crédito em dobro: saldo R$ ${saldo} para um pagamento de R$ 100.` };
+}
+
+function pixInvariant(db: DbState): Verdict {
+  const saldo = v(db, "conta") ?? 0;
+  const pix = db.log.filter((l) => l.event.startsWith("PixEnviado")).length;
+  if (saldo < 0) return { ok: false, message: `Saldo negativo: ${pix} Pix de R$ 600 saíram de uma conta com R$ 1.000 (saldo final R$ ${saldo}).` };
+  return { ok: true, message: `Correto: ${pix} Pix enviado(s), saldo final R$ ${saldo}.` };
+}
+
+function seatInvariant(db: DbState): Verdict {
+  const confirmadas = db.log.filter((l) => l.event === "reserva confirmada").length;
+  return confirmadas <= 1
+    ? { ok: true, message: `Correto: ${confirmadas} reserva confirmada para o assento 12.` }
+    : { ok: false, message: `Assento 12 confirmado para ${confirmadas} pessoas.` };
+}
+
+/** Therac-25: dispara o feixe com a configuração que a tarefa enxerga agora. */
+const fire: Step = {
+  label: "disparar o feixe",
+  exec: (ctx) => {
+    const feixe = readOwn(ctx, "feixe").value;
+    const prato = readOwn(ctx, "prato").value;
+    const ok = (feixe === 100 && prato === 1) || (feixe === 1 && prato === 2);
+    const kind = ok ? "dose correta" : feixe === 100 ? "overdose" : "subdose";
+    ctx.db.log.push({ tx: ctx.tx, event: kind });
+    return { kind: "ok", note: `feixe ${feixe === 100 ? "ALTA corrente" : "baixa corrente"}, prato na posição ${prato === 1 ? "raio X (com alvo)" : "elétron (sem alvo)"}: ${kind}` };
+  },
+};
+
+function theracInvariant(db: DbState): Verdict {
+  const e = db.log.find((l) => l.event !== "dose correta")?.event;
+  if (e === "overdose") return { ok: false, message: "Overdose: feixe de alta corrente (configurado para raio X) com o prato na posição de elétron, sem o alvo." };
+  if (e === "subdose") return { ok: false, message: "Dose errada: o feixe foi configurado para um modo e o prato está em outro." };
+  return { ok: true, message: "Correto: o feixe disparou com a configuração física do modo escolhido." };
+}
+
+const MODO = { initial: { modo: 1, feixe: 0, prato: 1 } };
+
+SCENARIOS.push(
+  {
+    id: "mensagem-duplicada",
+    title: "Mensagem duplicada: crédito em dobro",
+    description:
+      "A fila entregou duas vezes a mensagem \"pagamento 42 aprovado\" (entrega at-least-once), e dois consumidores processam ao mesmo tempo. Cada um confere se o pagamento já foi processado, credita R$ 100 e marca como processado.",
+    lesson:
+      "Os dois conferem antes de alguém marcar, e os dois creditam. Conferir e depois marcar são dois passos; entre eles cabe o outro consumidor. A correção é tornar o \"já processei?\" atômico: uma chave de idempotência com UNIQUE, na mesma transação do crédito.",
+    initial: { processado: 0, saldo: 0 },
+    txs: ["Consumidor 1", "Consumidor 2"].map((name) => ({
+      name,
+      steps: [select("processado", "p"), atomicAdd("saldo", 100, null, "ok", novo), update("processado", "1", () => 1, novo)],
+    })),
+    invariant: creditInvariant,
+  },
+  {
+    id: "mensagem-idempotente",
+    title: "Correção: chave de idempotência (UNIQUE)",
+    description:
+      "Cada consumidor abre uma transação, insere o id da mensagem numa tabela com chave única e só credita se o INSERT funcionou. Tudo no mesmo COMMIT.",
+    lesson:
+      "O segundo INSERT espera o lock da chave e, quando passa, encontra a chave já gravada: não credita. Se o primeiro der rollback, a chave some junto e a mensagem pode ser processada de novo. É assim que se faz consumidor idempotente.",
+    initial: { saldo: 0 },
+    txs: ["Consumidor 1", "Consumidor 2"].map((name) => ({
+      name,
+      steps: [begin(), insertUnique("processadas", "msg-42", "novo"), atomicAdd("saldo", 100, null, "ok", (x) => x.novo === 1), commit()],
+    })),
+    invariant: creditInvariant,
+  },
+  {
+    id: "reserva-assento",
+    title: "Reserva de assento: GET e depois SET",
+    description:
+      "Dois fãs clicam no assento 12 ao mesmo tempo. O serviço consulta o Redis (GET); se estiver vazio, grava o dono (SET) e confirma a reserva. (1 = fã A, 2 = fã B.)",
+    lesson:
+      "Os dois fazem GET antes de alguém fazer SET, os dois veem vazio e os dois recebem \"reservado\". Cada comando do Redis é atômico, mas a sequência GET + SET não é.",
+    initial: {},
+    txs: [1, 2].map((n) => ({
+      name: `Fã ${n === 1 ? "A" : "B"}`,
+      steps: [redisGet("assento:12", "dono"), redisSet("assento:12", n, (x) => x.dono === null), emit("reserva confirmada", (x) => x.dono === null)],
+    })),
+    invariant: seatInvariant,
+  },
+  {
+    id: "reserva-set-nx",
+    title: "Correção: SET NX (um comando só)",
+    description: "Cada fã tenta SET assento:12 <id> NX PX 420000: grava só se a chave não existir, com validade de 7 minutos.",
+    lesson:
+      "Conferir e gravar viram um comando só: o segundo recebe \"não gravou\". Na compra, a garantia final ainda fica no banco (UPDATE condicional ou UNIQUE), porque a chave pode expirar ou se perder num failover do Redis.",
+    initial: {},
+    txs: [1, 2].map((n) => ({
+      name: `Fã ${n === 1 ? "A" : "B"}`,
+      steps: [redisSetNx("assento:12", n, "ok"), emit("reserva confirmada", (x) => x.ok === 1)],
+    })),
+    invariant: seatInvariant,
+  },
+  {
+    id: "pix-duplo",
+    title: "Pix duplo no event sourcing",
+    description:
+      "A conta tem R$ 1.000 e é um stream de eventos. Dois Pix de R$ 600 chegam juntos. Cada um reidrata a conta, confere se há saldo e acrescenta o evento PixEnviado.",
+    lesson:
+      "Os dois leem R$ 1.000 antes de qualquer append, os dois acham que há saldo e os dois gravam: saldo negativo. Ler do event store (a fonte da verdade) não basta; o append precisa conferir que ninguém gravou no meio.",
+    initial: { conta: 1000 },
+    txs: ["Pix 1", "Pix 2"].map((name) => ({
+      name,
+      steps: [loadStream("conta", "s"), appendEvent("conta", "PixEnviado R$ 600", -600, null, (x) => (x.s ?? 0) >= 600)],
+    })),
+    invariant: pixInvariant,
+  },
+  {
+    id: "pix-versao",
+    title: "Correção: append com versão esperada",
+    description: "O append leva a versão lida (expectedRevision). Se o stream mudou desde a leitura, o event store recusa e o Pix recomeça.",
+    lesson:
+      "Quem perde a corrida recomeça, reidrata R$ 400, vê que não há saldo e não envia. É o lock otimista aplicado ao event store (EventStoreDB/KurrentDB chamam de expected revision).",
+    initial: { conta: 1000 },
+    txs: ["Pix 1", "Pix 2"].map((name) => ({
+      name,
+      maxRestarts: 3,
+      steps: [loadStream("conta", "s"), appendEvent("conta", "PixEnviado R$ 600", -600, "s_ver", (x) => (x.s ?? 0) >= 600)],
+    })),
+    invariant: pixInvariant,
+  },
+  {
+    id: "therac-25",
+    title: "Therac-25: a corrida que matou",
+    description:
+      "Máquina de radioterapia. O operador digitou raio X (modo 1) por engano e corrigiu para elétron (modo 2) em poucos segundos. Enquanto isso, a tarefa de configuração já tinha lido o modo antigo. (Simplificação do caso real.)",
+    lesson:
+      "A configuração leu \"raio X\" e ajustou o feixe para alta corrente; o operador trocou para elétron e o prato girou para a posição sem alvo; o disparo saiu com alta corrente direto no paciente. Entre 1985 e 1987 houve overdoses maciças em 6 pacientes, com pelo menos 3 mortes. O modelo anterior tinha travas de hardware; este confiava só no software.",
+    ...MODO,
+    txs: [
+      { name: "Configuração", steps: [select("modo", "m"), update("feixe", "corrente do modo lido", (x) => (x.m === 1 ? 100 : 1)), fire] },
+      { name: "Operador", steps: [update("modo", "2 (elétron)", () => 2), update("prato", "2 (elétron)", () => 2)] },
+    ],
+    invariant: theracInvariant,
+  },
+  {
+    id: "therac-25-trava",
+    title: "Correção: trava e edição atômica",
+    description:
+      "A configuração trava o modo (SELECT FOR UPDATE) até disparar; a edição do operador muda modo e prato numa transação só.",
+    lesson:
+      "Com a trava, a edição espera o disparo terminar (ou o disparo espera a edição inteira) e o feixe sempre bate com o prato. Na engenharia de verdade, a lição do Therac-25 vai além: travas de hardware independentes, checar de novo antes de agir e não reaproveitar software sem reanalisar (Leveson e Turner, 1993).",
+    ...MODO,
+    txs: [
+      { name: "Configuração", steps: [begin(), selectForUpdate("modo", "m"), update("feixe", "corrente do modo lido", (x) => (x.m === 1 ? 100 : 1)), fire, commit()] },
+      { name: "Operador", steps: [begin(), update("modo", "2 (elétron)", () => 2), update("prato", "2 (elétron)", () => 2), commit()] },
+    ],
+    invariant: theracInvariant,
+  },
+);
 
 export function getScenario(id: string): Scenario | undefined {
   return SCENARIOS.find((s) => s.id === id);

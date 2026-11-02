@@ -19,10 +19,11 @@ export function useSimulation() {
     worker.current?.terminate();
     const w = new Worker(new URL("../../workers/sim.worker.ts", import.meta.url), { type: "module" });
     worker.current = w;
+    const version = s.graphVersion;
     s.set({ running: true, error: null });
     w.onmessage = (ev: MessageEvent<{ ok: true; result: SimResult } | { ok: false; error: string }>) => {
       const data = ev.data;
-      useCanvas.getState().set(data.ok ? { result: data.result, running: false } : { error: data.error, running: false });
+      useCanvas.getState().set(data.ok ? { result: data.result, running: false, resultVersion: version } : { error: data.error, running: false });
       w.terminate();
     };
     w.postMessage({ graph, config: { durationSec: s.durationSec, seed: 42, warmupSec: 2, failures: s.failures } });

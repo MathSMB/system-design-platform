@@ -53,4 +53,40 @@ describe("cenários de concorrência", () => {
     expect(() => runSchedule(s, [0, 0, 1, 1])).toThrow(); // B não consegue travar
     expect(run.db.locks.estoque).toBe(0);
   });
+
+  for (const [bug, fix] of [
+    ["mensagem-duplicada", "mensagem-idempotente"],
+    ["reserva-assento", "reserva-set-nx"],
+    ["pix-duplo", "pix-versao"],
+    ["therac-25", "therac-25-trava"],
+  ] as const) {
+    it(`${bug}: alguma ordem quebra; ${fix}: nenhuma quebra`, () => {
+      const b = explore(bug);
+      expect(b.violations).toBeGreaterThan(0);
+      const f = explore(fix);
+      expect(f.total).toBeGreaterThan(1);
+      expect(f.violations).toBe(0);
+      expect(f.deadlocks).toBe(0);
+    });
+  }
+
+  it("mensagem duplicada: os dois conferem antes de marcar e creditam R$ 200", () => {
+    const s = getScenario("mensagem-duplicada")!;
+    const run = runSchedule(s, [0, 1, 0, 1, 0, 1]);
+    expect(run.db.rows.saldo!.value).toBe(200);
+  });
+
+  it("Therac-25: configuração lê raio X, operador corrige, disparo sai em overdose", () => {
+    const s = getScenario("therac-25")!;
+    const run = runSchedule(s, [0, 0, 1, 1, 0]);
+    expect(s.invariant(run.db).message).toContain("Overdose");
+  });
+
+  it("Pix com versão: o perdedor recomeça e não envia", () => {
+    const s = getScenario("pix-versao")!;
+    const run = runSchedule(s, [0, 1, 0, 1, 1, 1]);
+    expect(run.txs[1]!.restarts).toBe(1);
+    expect(run.db.rows.conta!.value).toBe(400);
+  });
 });
+

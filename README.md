@@ -1,6 +1,6 @@
 # System Design Lab
 
-Plataforma para treinar entrevistas de system design: **desenhe** a arquitetura num canvas estilo Excalidraw, **simule** carga e concorrência de verdade e receba **avaliação por IA**.
+Plataforma para treinar entrevistas de system design: **desenhe** a arquitetura num canvas com visual neon de diagrama de arquitetura, **simule** carga e concorrência de verdade e receba **avaliação por IA**.
 
 A base técnica do projeto (conceitos, como simular cada um, cenários de entrevista, referências) está em [`docs/base-tecnica.md`](docs/base-tecnica.md).
 
@@ -10,6 +10,9 @@ A base técnica do projeto (conceitos, como simular cada um, cenários de entrev
 - **Trilha de 0 a 1 milhão de usuários**: arquiteturas prontas para começar.
 - **Réplicas de leitura com replication lag**: o banco pode ter réplicas (leituras nas réplicas, escritas no primário). Os usuários fazem uma fração de escritas e releem logo depois; o simulador conta quantas leituras voltam **sem a escrita do próprio usuário** e mostra o lag. A opção *read-your-writes* (ler do primário por um tempo após escrever) corrige, e dá para ver a carga voltando para o primário. Trilha "4. Réplicas de leitura".
 - **Laboratório de concorrência** (`/concorrencia`): avance duas transações passo a passo e veja race conditions acontecendo. O botão "testar todas as ordens possíveis" enumera todas as intercalações e mostra em quantas a regra quebra. Cenários: último ingresso (lost update) e três correções (UPDATE atômico, SELECT FOR UPDATE, lock otimista), write skew, deadlock e cache-aside com valor velho.
+- **Tour da tela**: na primeira visita ao canvas aparece um convite para um tour (ou o botão "?" ao lado de Simular). A tela escurece e só o elemento explicado fica aceso.
+- **Treinos guiados** (`/treinos`): um mentor conduz cases no roteiro de entrevista do Renato Augusto (requisitos, estimativas, desenho incremental, gargalos, trade-offs). Cada etapa é uma pergunta, uma conta ou uma tarefa no canvas que o sistema confere sozinho e explica. Cases: de 0 a 1 milhão de usuários, cache-aside e avalanche, réplicas de leitura, encurtador de URL.
+- **Desafio sorteado** (`/desafio`): sorteia um problema (Black Friday, placar da Copa, feed, e-mail de pedido, ingressos, pagamentos) e mostra só o enunciado e a carga. Você monta, simula e entrega; a nota sai em estrelas (erros, latência p99 e folga para pico).
 - **Avaliação por IA** (aba Avaliação no canvas): dois avaliadores (big tech e staff de startup) dão nota por dimensão, perguntas de follow-up e próximos passos, usando os números da simulação como evidência.
 
 ## Rodando localmente
@@ -61,7 +64,7 @@ A avaliação por IA publicada precisa de `AI_PROVIDER=api` e `ANTHROPIC_API_KEY
 ## Estrutura
 
 ```
-apps/web               Next.js (canvas com React Flow + rough.js, Tailwind, Zustand, uPlot)
+apps/web               Next.js (canvas com React Flow + ícones lucide, Tailwind, Zustand, uPlot)
 packages/sim-engine    Motor de carga: simulação de eventos discretos (roda num Web Worker)
 packages/race-sim      Motor de concorrência: intercalação passo a passo + mini-banco com locks
 packages/ai            Avaliação por IA: Claude Code local (assinatura) ou API da Anthropic
