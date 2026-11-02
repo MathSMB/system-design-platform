@@ -443,3 +443,15 @@ input[type="checkbox"] {
     transform: scale(1.06);
   }
 }
+
+/* painel do glossário entrando pela direita */
+.slide-in {
+  animation: slide-in 0.25s ease-out both;
+}
+@keyframes slide-in {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide-in { animation: none; }
+}

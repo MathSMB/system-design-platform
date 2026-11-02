@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, CircleX, Cpu, GraduationCap, MessageSquareQuote, PlayCircle, RotateCcw, Trophy } from "lucide-react";
+import { BookOpen, Calculator, CheckCircle2, ChevronLeft, ChevronRight, CircleX, Cpu, GraduationCap, LifeBuoy, MessageSquareQuote, PlayCircle, RotateCcw, Trophy, Undo2 } from "lucide-react";
+import { Glossed } from "@/components/glossary/Glossary";
 import type { SimResult } from "@sdp/sim-engine";
 import { useCanvas, type Snapshot } from "@/components/canvas/store";
 import { CASES } from "@/lib/training/cases";
 import type { CheckOutcome, GuidedCase, Ref, Step } from "@/lib/training/types";
+import { RefList } from "./RefList";
 import { readBoard } from "./useBoard";
 
 const KEY = (id: string) => `sdp-case-${id}`;
@@ -51,6 +53,16 @@ export function Coach({ c, onRestart }: { c: GuidedCase; onRestart(): void }) {
     if (snap) useCanvas.getState().restore(snap);
     else onRestart(); // etapa aberta direto (progresso salvo): volta ao desenho inicial do case
   };
+  // volta a aula inteira: história aberta, etapa 1 e desenho inicial
+  const restartLesson = () => {
+    snaps.current.clear();
+    saveProgress(c.id, 0);
+    setPassed(c.steps.map(() => false));
+    setI(0);
+    onRestart();
+    setRun((r) => r + 1);
+  };
+  const [run, setRun] = useState(0);
   const markPassed = () => setPassed((p) => p.map((x, k) => (k === i ? true : x)));
 
   const next = CASES[CASES.findIndex((x) => x.id === c.id) + 1];
@@ -59,7 +71,7 @@ export function Coach({ c, onRestart }: { c: GuidedCase; onRestart(): void }) {
     <div className="flex flex-col gap-3" data-tour="coach">
       <div className="flex items-center gap-2">
         <GraduationCap size={16} className="text-accent-2" />
-        <span className="hud-label !text-accent-2">Case guiado · {c.level}</span>
+        <span className="hud-label !text-accent-2">Estudo · System Design · {c.level}</span>
       </div>
       <h1 className="font-display text-[11px] leading-relaxed text-accent glow">{c.title}</h1>
       {c.video && (
@@ -74,9 +86,11 @@ export function Coach({ c, onRestart }: { c: GuidedCase; onRestart(): void }) {
       )}
 
       {c.story && (
-        <details open={i === 0} className="panel group p-2.5 text-[13px] leading-relaxed text-muted">
+        <details key={run} open={i === 0} className="panel group p-2.5 text-[13px] leading-relaxed text-muted">
           <summary className="cursor-pointer list-none hud-label !text-accent-2">▸ A história</summary>
-          <p className="mt-1.5 text-text/90">{c.story}</p>
+          <p className="mt-1.5 text-text/90">
+            <Glossed text={c.story} />
+          </p>
         </details>
       )}
 
@@ -107,13 +121,13 @@ export function Coach({ c, onRestart }: { c: GuidedCase; onRestart(): void }) {
             <Link href="/entrevista/system-design" className="btn-ghost px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
               Entrevista técnica
             </Link>
-            <button onClick={() => go(0)} className="btn-ghost px-3 py-1.5 text-xs">
-              Refazer
+            <button onClick={restartLesson} className="btn-ghost px-3 py-1.5 text-xs">
+              Refazer a aula
             </button>
           </div>
         </div>
       ) : (
-        <StepView key={`${c.id}-${i}`} step={c.steps[i]!} index={i} total={c.steps.length} passed={passed[i]!} onPass={markPassed} />
+        <StepView key={`${c.id}-${run}-${i}`} step={c.steps[i]!} index={i} total={c.steps.length} passed={passed[i]!} onPass={markPassed} onResetStep={resetBoard} />
       )}
 
       {done && <WrapUp c={c} />}
@@ -123,8 +137,8 @@ export function Coach({ c, onRestart }: { c: GuidedCase; onRestart(): void }) {
           <button onClick={() => go(Math.max(0, i - 1))} disabled={i === 0} className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs disabled:opacity-30">
             <ChevronLeft size={14} /> Voltar
           </button>
-          <button onClick={resetBoard} title="Volta o desenho para como estava no começo desta etapa (dá para desfazer com Ctrl+Z)" className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs">
-            <RotateCcw size={13} /> Reiniciar desenho
+          <button onClick={restartLesson} title="Volta para o começo da aula: história, etapa 1 e desenho inicial" className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs">
+            <RotateCcw size={13} /> Reiniciar aula
           </button>
           <button
             onClick={() => go(i + 1)}
@@ -189,163 +203,124 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   );
 }
 
-export function RefList({ refs }: { refs: Ref[] }) {
-  return (
-    <ul className="flex flex-col gap-1.5">
-      {refs.map((r) => (
-        <li key={r.title} className="leading-snug">
-          {r.url ? (
-            <a href={r.url} target="_blank" rel="noreferrer" className="text-text hover:text-accent">
-              {r.title}
-            </a>
-          ) : (
-            <span className="text-text">{r.title}</span>
-          )}
-          {r.by && <span className="text-muted"> · {r.by}</span>}
-          {r.note && <div className="text-xs text-muted">{r.note}</div>}
-        </li>
-      ))}
-    </ul>
-  );
-}
+export { RefList };
 
-function StepView({ step, index, total, passed, onPass }: { step: Step; index: number; total: number; passed: boolean; onPass(): void }) {
+function StepView({ step, index, total, passed, onPass, onResetStep }: { step: Step; index: number; total: number; passed: boolean; onPass(): void; onResetStep(): void }) {
+  // no Estudo o mentor não pergunta: explica. Só as etapas no canvas pedem ação.
+  const explain = step.type !== "build";
+  useEffect(() => {
+    if (explain && !passed) onPass();
+  }, [explain, passed, onPass]);
   return (
     <div className="panel pop-in flex flex-col gap-2 p-3 text-sm">
       <div className="hud-label">
-        etapa {index + 1}/{total}
+        etapa {index + 1}/{total} {step.type === "build" ? "· mão na massa" : ""}
       </div>
       <div className="font-semibold text-text">{step.title}</div>
-      <p className="leading-relaxed text-muted">{step.body}</p>
-      {step.type === "info" && <InfoStep onPass={onPass} passed={passed} />}
-      {step.type === "choice" && <ChoiceStep step={step} passed={passed} onPass={onPass} />}
-      {step.type === "number" && <NumberStep step={step} passed={passed} onPass={onPass} />}
-      {step.type === "build" && <BuildStep step={step} passed={passed} onPass={onPass} />}
-      {step.type === "open" && <OpenStep step={step} passed={passed} onPass={onPass} />}
+      <p className="leading-relaxed text-text/85">
+        <Glossed text={step.body} />
+      </p>
+      {step.type === "choice" && <ChoiceExplain step={step} />}
+      {step.type === "number" && <NumberExplain step={step} />}
+      {step.type === "open" && <Lesson text={step.reference} title="Como explicar" />}
+      {step.type === "build" && <BuildStep step={step} passed={passed} onPass={onPass} onResetStep={onResetStep} />}
     </div>
   );
 }
 
-function Lesson({ text }: { text: string }) {
+function Lesson({ text, title = "Mentor" }: { text: string; title?: string }) {
   return (
-    <div className="pop-in mt-1 rounded-md border border-accent/40 bg-accent/5 p-2 text-[13px] leading-relaxed text-text">
-      <span className="font-semibold text-accent">Mentor: </span>
-      {text}
+    <div className="pop-in mt-1 rounded-md border border-accent/40 bg-accent/5 p-2.5 text-[13px] leading-relaxed text-text">
+      <span className="font-semibold text-accent">{title}: </span>
+      <Glossed text={text} />
     </div>
   );
 }
 
-function InfoStep({ passed, onPass }: { passed: boolean; onPass(): void }) {
-  useEffect(() => {
-    if (!passed) onPass();
-  }, [passed, onPass]);
-  return null;
-}
-
-function ChoiceStep({ step, passed, onPass }: { step: Extract<Step, { type: "choice" }>; passed: boolean; onPass(): void }) {
-  const [tried, setTried] = useState<number[]>(() => (passed ? [step.choices.findIndex((c) => c.correct)] : []));
-  const last = tried[tried.length - 1];
+/** Antes era pergunta; no Estudo vira explicação: a resposta, o porquê e por que as outras saídas não servem. */
+function ChoiceExplain({ step }: { step: Extract<Step, { type: "choice" }> }) {
+  const right = step.choices.filter((ch) => ch.correct);
+  const wrong = step.choices.filter((ch) => !ch.correct);
   return (
-    <div className="flex flex-col gap-1.5">
-      {step.choices.map((ch, k) => {
-        const picked = tried.includes(k);
-        const style = picked ? (ch.correct ? "border-ok text-ok bg-ok/10" : "border-down/70 text-down/90 bg-down/5 line-through") : "";
-        return (
-          <button
-            key={k}
-            disabled={picked || passed}
-            onClick={() => {
-              setTried([...tried, k]);
-              if (ch.correct) onPass();
-            }}
-            className={`btn-ghost px-2 py-1.5 text-left text-[13px] ${style}`}
-          >
-            <span className="mr-1.5 font-mono text-[11px] text-muted">{String.fromCharCode(65 + k)}</span>
-            {ch.text}
-          </button>
-        );
-      })}
-      {last !== undefined && (
-        <div className={`pop-in flex gap-1.5 text-[13px] ${step.choices[last]!.correct ? "text-ok" : "text-down"}`}>
-          {step.choices[last]!.correct ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <CircleX size={16} className="mt-0.5 shrink-0" />}
-          <span>{step.choices[last]!.why}</span>
+    <div className="flex flex-col gap-2">
+      {right.map((ch) => (
+        <div key={ch.text} className="pop-in flex gap-2 rounded-md border border-ok/50 bg-ok/5 p-2.5 text-[13px] leading-relaxed">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-ok" />
+          <span>
+            <span className="font-semibold text-ok">{ch.text}. </span>
+            <Glossed text={ch.why.replace(/^Isso\.\s*/, "")} />
+          </span>
         </div>
+      ))}
+      <Lesson text={step.lesson} />
+      {wrong.length > 0 && (
+        <details className="rounded-md border border-border p-2 text-[13px]">
+          <summary className="cursor-pointer text-xs text-muted hover:text-text">E por que não {wrong.length === 1 ? "a outra saída" : `as outras ${wrong.length} saídas`}?</summary>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {wrong.map((ch) => (
+              <li key={ch.text} className="flex gap-1.5 leading-relaxed">
+                <CircleX size={14} className="mt-0.5 shrink-0 text-down/80" />
+                <span>
+                  <span className="text-text">{ch.text}: </span>
+                  <span className="text-muted">
+                    <Glossed text={ch.why} />
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
-      {passed && <Lesson text={step.lesson} />}
     </div>
   );
 }
 
-function NumberStep({ step, passed, onPass }: { step: Extract<Step, { type: "number" }>; passed: boolean; onPass(): void }) {
-  const [value, setValue] = useState("");
-  const [attempts, setAttempts] = useState(0);
-  const [msg, setMsg] = useState<string | null>(null);
-  const check = () => {
-    const v = Number(value.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(v)) return setMsg("Digite um número.");
-    setAttempts((a) => a + 1);
-    if (Math.abs(v - step.answer) <= step.answer * step.tolerance) {
-      setMsg(null);
-      onPass();
-    } else setMsg(v < step.answer ? "Está baixo. Refaça a conta com calma." : "Está alto. Refaça a conta com calma.");
-  };
+function NumberExplain({ step }: { step: Extract<Step, { type: "number" }> }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      {!passed && (
-        <div className="flex items-center gap-2">
-          <input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && check()}
-            placeholder="sua conta"
-            className="w-32"
-            inputMode="decimal"
-          />
-          <span className="text-xs text-muted">{step.unit}</span>
-          <button onClick={check} className="btn-neon ml-auto px-2.5 py-1 text-xs">
-            Conferir
-          </button>
-        </div>
-      )}
-      {msg && <div className="text-[13px] text-down">{msg}</div>}
-      {!passed && attempts >= 2 && (
-        <button onClick={onPass} className="self-start text-xs text-muted underline hover:text-accent">
-          Ver a resposta
-        </button>
-      )}
-      {passed && (
-        <>
-          <div className="pop-in flex items-center gap-1.5 text-[13px] text-ok">
-            <CheckCircle2 size={16} /> ≈ {fmt(step.answer)} {step.unit}
-          </div>
-          <Lesson text={step.lesson} />
-        </>
-      )}
+    <div className="flex flex-col gap-2">
+      <div className="pop-in flex items-center gap-2 rounded-md border border-accent-2/50 bg-accent-2/5 p-2.5 text-[13px]">
+        <Calculator size={16} className="shrink-0 text-accent-2" />
+        <span>
+          Resultado: <span className="font-mono text-accent-2">≈ {fmt(step.answer)}</span> {step.unit}
+        </span>
+      </div>
+      <Lesson text={step.lesson} title="A conta" />
     </div>
   );
 }
 
-function BuildStep({ step, passed, onPass }: { step: Extract<Step, { type: "build" }>; passed: boolean; onPass(): void }) {
+function BuildStep({ step, passed, onPass, onResetStep }: { step: Extract<Step, { type: "build" }>; passed: boolean; onPass(): void; onResetStep(): void }) {
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
+  const [fails, setFails] = useState(0);
+  const [help, setHelp] = useState(0);
   // resultado que existia quando a etapa começou, para comparar antes e depois
   const before = useRef<SimResult | null>(useCanvas.getState().result);
   const result = useCanvas((s) => s.result);
   const resultVersion = useCanvas((s) => s.resultVersion);
 
-  const verify = (silent = false) => {
+  const verify = () => {
     const o = step.check(readBoard(before.current));
+    setOutcome(o);
     if (o.ok) onPass();
-    if (!silent || o.ok) setOutcome(o);
+    else setFails((f) => f + 1);
   };
 
-  // confere sozinho quando chega um resultado novo
+  // confere sozinho cada simulação nova (feita nesta etapa) e diz se deu ou não
   useEffect(() => {
-    if (!passed && result) verify(true);
+    if (!passed && result && result !== before.current) verify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, resultVersion]);
+  // a simulação nem rodou (desenho incompleto): diz o que falta
+  const simError = useCanvas((s) => s.error);
+  useEffect(() => {
+    if (!passed && simError) verify();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simError]);
+
+  const diagnosis = result?.diagnosis.slice(0, 2) ?? [];
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-1">
         {step.tasks.map((t) => (
           <li key={t} className="flex gap-1.5 text-[13px] text-text">
@@ -355,34 +330,52 @@ function BuildStep({ step, passed, onPass }: { step: Extract<Step, { type: "buil
         ))}
       </ul>
       {!passed && (
-        <button onClick={() => verify()} className="btn-neon self-start px-2.5 py-1 text-xs">
-          Verificar
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={verify} className="btn-neon px-2.5 py-1 text-xs">
+            Verificar
+          </button>
+          <button onClick={onResetStep} title="Volta o desenho para como estava no começo desta etapa (Ctrl+Z desfaz)" className="flex items-center gap-1 text-xs text-muted hover:text-accent">
+            <Undo2 size={12} /> desfazer o que fiz nesta etapa
+          </button>
+        </div>
       )}
-      {outcome && !outcome.ok && <div className="pop-in text-[13px] text-down">{outcome.hint}</div>}
+      {outcome && !outcome.ok && (
+        <div className="pop-in flex flex-col gap-2 rounded-md border border-down/50 bg-down/5 p-2.5 text-[13px] leading-relaxed">
+          <div className="flex gap-1.5 text-down">
+            <CircleX size={16} className="mt-0.5 shrink-0" />
+            <span>
+              <span className="font-semibold">Ainda não. </span>
+              {outcome.hint}
+            </span>
+          </div>
+          {help >= 1 && diagnosis.length > 0 && (
+            <div className="pop-in text-text/90">
+              <span className="font-semibold text-warn">O que o simulador viu: </span>
+              {diagnosis.join(" ").replace(/\*\*/g, "")}
+            </div>
+          )}
+          {help >= 2 && (
+            <div className="pop-in text-text/90">
+              <span className="font-semibold text-accent">Como deve ficar: </span>
+              <Glossed text={step.solution ?? `${step.body} ${step.tasks.join(". ")}.`} />
+            </div>
+          )}
+          {help < 2 && (
+            <button onClick={() => setHelp((h) => h + 1)} className="flex items-center gap-1 self-start text-xs text-accent hover:underline">
+              <LifeBuoy size={12} /> {help === 0 ? "Me dá mais uma dica" : "Mostrar como deve ficar"}
+            </button>
+          )}
+        </div>
+      )}
+      {!outcome && fails === 0 && !passed && <p className="text-[12px] text-muted">Quando simular, eu confiro sozinho e digo se deu certo.</p>}
       {passed && (
         <>
           <div className="pop-in flex items-center gap-1.5 text-[13px] text-ok">
-            <CheckCircle2 size={16} /> Feito!
+            <CheckCircle2 size={16} /> Deu certo!
           </div>
           <Lesson text={step.lesson} />
         </>
       )}
-    </div>
-  );
-}
-
-function OpenStep({ step, passed, onPass }: { step: Extract<Step, { type: "open" }>; passed: boolean; onPass(): void }) {
-  const [text, setText] = useState("");
-  return (
-    <div className="flex flex-col gap-1.5">
-      <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Escreva como você responderia na entrevista…" />
-      {!passed && (
-        <button onClick={onPass} disabled={text.trim().length < 10} className="btn-neon self-start px-2.5 py-1 text-xs disabled:opacity-40">
-          Comparar com a referência
-        </button>
-      )}
-      {passed && <Lesson text={step.reference} />}
     </div>
   );
 }

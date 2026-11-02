@@ -1,5 +1,6 @@
 "use client";
 
+import { HelpDot } from "@/components/glossary/Glossary";
 import { Bold } from "./Bold";
 import { CountUp } from "./CountUp";
 import { useCanvas } from "./store";
@@ -25,10 +26,10 @@ export function ResultsPanel() {
   if (!r) return <p className="text-sm text-muted">Rode a simulação para ver throughput, latência e onde o sistema quebra.</p>;
 
   const cards = [
-    { label: "req/s", value: r.totalRequests / r.simulatedSec, format: (x: number) => fmt(x) },
-    { label: "erros", value: r.errorRate * 100, format: (x: number) => `${fmt(x, 2)}%`, bad: r.errorRate > 0.01 },
-    { label: "p50", value: r.latency.p50Ms, format: (x: number) => `${fmt(x, 1)} ms` },
-    { label: "p99", value: r.latency.p99Ms, format: (x: number) => `${fmt(x, 1)} ms`, bad: r.latency.p99Ms > 500 },
+    { label: "req/s", help: "req-s", value: r.totalRequests / r.simulatedSec, format: (x: number) => fmt(x) },
+    { label: "erros", help: "taxa-de-erro", value: r.errorRate * 100, format: (x: number) => `${fmt(x, 2)}%`, bad: r.errorRate > 0.01 },
+    { label: "p50", help: "p50", value: r.latency.p50Ms, format: (x: number) => `${fmt(x, 1)} ms` },
+    { label: "p99", help: "p99", value: r.latency.p99Ms, format: (x: number) => `${fmt(x, 1)} ms`, bad: r.latency.p99Ms > 500 },
   ];
 
   return (
@@ -36,7 +37,9 @@ export function ResultsPanel() {
       <div className="grid grid-cols-4 gap-2">
         {cards.map((c, i) => (
           <div key={c.label} className={`panel pop-in p-2 ${c.bad ? "pulse-bad" : ""}`} style={{ animationDelay: `${i * 70}ms` }}>
-            <div className="font-mono text-[10px] uppercase text-muted">{c.label}</div>
+            <div className="flex items-center justify-between font-mono text-[10px] uppercase text-muted">
+              {c.label} <HelpDot id={c.help} label={c.label} />
+            </div>
             <div className={`font-mono text-base ${c.bad ? "text-bad glow" : "text-accent"}`}>
               <CountUp value={c.value} format={c.format} />
             </div>
@@ -45,7 +48,7 @@ export function ResultsPanel() {
       </div>
       {r.consistency.staleReads > 0 && (
         <div className="rounded-md border border-bad/50 bg-bad/10 p-2 text-xs text-bad">
-          <span className="font-mono">{fmt(r.consistency.staleReads)}</span> leituras com dado velho (
+          <span className="font-mono">{fmt(r.consistency.staleReads)}</span> leituras com dado velho <HelpDot id="dado-velho" /> (
           {fmt((r.consistency.staleReads / Math.max(1, r.consistency.dbReads)) * 100, 1)}% das leituras no banco)
         </div>
       )}
@@ -53,19 +56,27 @@ export function ResultsPanel() {
         <p key={w} className="text-xs text-warn">{w}</p>
       ))}
       <div>
-        <div className="mb-1 hud-label">Onde quebrou</div>
+        <div className="mb-1 flex items-center gap-1.5 hud-label">
+          Onde quebrou <HelpDot id="gargalo" label="onde quebrou" />
+        </div>
         <ul className="flex list-disc flex-col gap-1 pl-4 text-muted">
           {r.diagnosis.map((d, i) => (
             <li key={i}><Bold text={d} /></li>
           ))}
         </ul>
       </div>
-      <TimelineChart points={r.timeline} />
+      <div>
+        <div className="mb-1 flex items-center gap-1.5 hud-label">
+          Linha do tempo <HelpDot id="grafico" label="como ler o gráfico" />
+          <span className="ml-auto normal-case tracking-normal text-[10px] text-muted">verde ok · vermelho erro · azul p99</span>
+        </div>
+        <TimelineChart points={r.timeline} />
+      </div>
       <details className="text-xs text-muted">
         <summary className="cursor-pointer">Detalhes por componente</summary>
         <table className="mt-2 w-full font-mono">
           <thead>
-            <tr className="text-left"><th>nó</th><th>util.</th><th>rejeit.</th><th>fila máx</th><th>lag máx</th></tr>
+            <tr className="text-left"><th>nó</th><th>util. <HelpDot id="utilizacao" /></th><th>rejeit. <HelpDot id="fila-interna" /></th><th>fila máx <HelpDot id="backlog" /></th><th>lag máx <HelpDot id="replication-lag" /></th></tr>
           </thead>
           <tbody>
             {r.nodes.map((n) => (

@@ -8,6 +8,7 @@ import "@fontsource/chakra-petch/700.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "./globals.css";
+import { GlossaryButton, GlossaryDrawer } from "@/components/glossary/Glossary";
 
 export const metadata: Metadata = {
   title: "System Design Lab",
@@ -29,12 +30,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/entrevista" className="transition-colors hover:text-accent-2">Entrevista</Link>
             <Link href="/canvas" className="transition-colors hover:text-accent">Canvas livre</Link>
             <Link href="/concorrencia" className="transition-colors hover:text-accent-2">Lab. concorrência</Link>
+            <Link href="/glossario" className="transition-colors hover:text-accent">Glossário</Link>
             <Link href="/bibliografia" className="transition-colors hover:text-accent">Bibliografia</Link>
           </nav>
+          <GlossaryButton className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent">
+            <span className="font-semibold uppercase tracking-[0.14em]">Saber mais</span>
+          </GlossaryButton>
           {/* linha neon sob o cabeçalho */}
           <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-[linear-gradient(90deg,transparent,var(--accent)_30%,var(--accent-2)_70%,transparent)] opacity-60" />
         </header>
         {children}
+        <GlossaryDrawer />
       </body>
     </html>
   );

@@ -5,6 +5,7 @@ import { PRESETS, type NodeKind } from "@sdp/sim-engine";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import { HelpCircle, Keyboard } from "lucide-react";
+import { GlossaryButton, HelpDot } from "@/components/glossary/Glossary";
 import { Tour } from "@/components/tour/Tour";
 import { CANVAS_TOUR } from "@/components/tour/steps";
 import { DesignsBar } from "./DesignsBar";
@@ -146,7 +147,9 @@ export function Canvas({ coach, setup }: { coach?: ReactNode; setup?: () => void
           </div>
         )}
         <div className="panel absolute left-3 top-3 flex items-center gap-2 p-2 text-sm backdrop-blur" data-tour="simulate">
-          <span className="text-muted">Duração</span>
+          <span className="flex items-center gap-1 text-muted">
+            Duração <HelpDot id="duracao" />
+          </span>
           <input type="number" className="w-16" min={5} max={600} value={durationSec} onChange={(e) => set({ durationSec: Number(e.target.value) })} />
           <span className="text-muted">s</span>
           <button onClick={run} disabled={running} className="btn-neon px-3 py-1 text-xs disabled:opacity-50">
@@ -155,6 +158,7 @@ export function Canvas({ coach, setup }: { coach?: ReactNode; setup?: () => void
           <button onClick={() => setHelpOpen(true)} title="Atalhos de teclado (?)" className="ml-1 text-muted transition-colors hover:text-accent">
             <Keyboard size={18} />
           </button>
+          <GlossaryButton className="text-muted transition-colors hover:text-accent" />
           {!coach && (
             <button onClick={() => setTourOpen(true)} title="Tour pela tela" className="text-muted transition-colors hover:text-accent">
               <HelpCircle size={18} />

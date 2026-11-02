@@ -285,6 +285,7 @@ export const CQRS_CASE: GuidedCase = {
     {
       type: "build",
       title: "Monte o modelo de leitura",
+      solution: "As APIs ligam no Cache, e o Cache liga no Postgres: API → Cache → Postgres. Clique no Cache e coloque hit rate 1. Apague as setas diretas API → Postgres. As leituras param no Cache (a tela pronta) e só as escritas chegam ao banco.",
       body: "No simulador, use um Cache como modelo de leitura: toda leitura encontra a tela pronta (hit rate 1) e as escritas passam por ele até o Postgres.",
       tasks: [
         "Adicione um Cache entre as APIs e o Postgres (API → Cache → Postgres)",
@@ -373,6 +374,7 @@ export const QUEUE_CASE: GuidedCase = {
     {
       type: "build",
       title: "Coloque uma fila",
+      solution: "Checkout → Fila → Pagamentos. Apague a seta direta Checkout → Pagamentos. Clique na Fila e coloque 40 consumidores: cada pagamento leva ~100 ms, então 40 consumidores entregam até ~400 por segundo, o máximo que o provedor aguenta (40 conexões) e bem acima da média de 100 pedidos/s. No pico a fila acumula; depois ela esvazia.",
       body: "O checkout grava o pedido na fila e responde na hora; consumidores tiram da fila e chamam o pagamento no ritmo dele.",
       tasks: [
         "Adicione uma Fila: Checkout → Fila → Pagamentos",
@@ -583,6 +585,7 @@ export const BROKER_CASE: GuidedCase = {
     {
       type: "build",
       title: "Tire do caminho",
+      solution: "Duas Filas: Pedidos → Fila 1 → Notificação e Pedidos → Fila 2 → Fiscal. Apague as setas diretas Pedidos → Notificação e Pedidos → Fiscal. Os Pedidos continuam ligados ao Postgres e ao Estoque, que o cliente precisa ver na hora.",
       body: "Cada consumidor tem a sua fila (é assim que o fan-out funciona: SNS → várias SQS, ou um consumer group por serviço no Kafka).",
       tasks: [
         "Pedidos → Fila → Notificação",

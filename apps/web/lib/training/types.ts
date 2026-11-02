@@ -35,7 +35,7 @@ export type Step =
   /** Conta de estimativa com tolerância. */
   | { type: "number"; title: string; body: string; answer: number; tolerance: number; unit: string; lesson: string }
   /** Tarefa no canvas; o botão "Verificar" roda a checagem. */
-  | { type: "build"; title: string; body: string; tasks: string[]; check(b: Board): CheckOutcome; lesson: string }
+  | { type: "build"; title: string; body: string; tasks: string[]; check(b: Board): CheckOutcome; lesson: string; /** Última dica: como o desenho deve ficar. */ solution?: string }
   /** Resposta livre; depois mostra a resposta de referência. */
   | { type: "open"; title: string; body: string; reference: string };
 

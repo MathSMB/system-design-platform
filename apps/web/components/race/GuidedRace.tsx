@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, CircleX, Cpu, FlaskConical, GraduationCap, Lightbulb, MessageSquareQuote, RotateCcw, Scale, Trophy } from "lucide-react";
 import { createRun, exploreAll, getScenario, runSchedule, stepTx, type ExploreSummary, type RunState } from "@sdp/race-sim";
-import { RefList } from "@/components/training/Coach";
+import { Glossed } from "@/components/glossary/Glossary";
+import { RefList } from "@/components/training/RefList";
 import { RACE_LESSONS, type Beat, type RaceLesson } from "@/lib/concurrency/lessons";
 import { ExploreResult, Lanes, MODEL_NOTE, StatePanel, Timeline } from "./RaceParts";
 
@@ -12,7 +13,6 @@ import { ExploreResult, Lanes, MODEL_NOTE, StatePanel, Timeline } from "./RacePa
 export function GuidedRace({ lesson }: { lesson: RaceLesson }) {
   const [part, setPart] = useState(0);
   const [beat, setBeat] = useState(0);
-  const [answered, setAnswered] = useState<Set<string>>(new Set());
   const [summary, setSummary] = useState<ExploreSummary | null>(null);
   const [done, setDone] = useState(false);
   const p = lesson.parts[part]!;
@@ -20,8 +20,8 @@ export function GuidedRace({ lesson }: { lesson: RaceLesson }) {
   const [run, setRun] = useState<RunState>(() => createRun(scenario));
   const scriptOver = beat >= p.beats.length;
   const cur: Beat | undefined = p.beats[beat];
-  const askKey = `${part}-${beat}`;
-  const waitingAnswer = !!cur?.ask && !answered.has(askKey);
+  // no Estudo o mentor não pergunta: ele explica o que vai acontecer antes do clique
+  const waitingAnswer = false;
 
   const restartPart = (k = part) => {
     const s = getScenario(lesson.parts[k]!.scenario)!;
@@ -52,7 +52,9 @@ export function GuidedRace({ lesson }: { lesson: RaceLesson }) {
 
         <details open={part === 0 && beat < 2} className="panel p-2.5 text-[13px] leading-relaxed">
           <summary className="cursor-pointer list-none hud-label !text-accent-2">▸ A história</summary>
-          <p className="mt-1.5 text-text/90">{lesson.story}</p>
+          <p className="mt-1.5 text-text/90">
+            <Glossed text={lesson.story} />
+          </p>
         </details>
         <div className="flex items-start gap-2 rounded-md border border-ok/40 bg-ok/5 p-2 text-[13px]">
           <Scale size={15} className="mt-0.5 shrink-0 text-ok" />
@@ -66,7 +68,9 @@ export function GuidedRace({ lesson }: { lesson: RaceLesson }) {
             <summary className="flex cursor-pointer list-none items-center gap-1.5 hud-label">
               <Lightbulb size={13} /> O que é {lesson.concept.title.toLowerCase()}?
             </summary>
-            <p className="mt-1.5 text-text/90">{lesson.concept.body}</p>
+            <p className="mt-1.5 text-text/90">
+              <Glossed text={lesson.concept.body} />
+            </p>
           </details>
         )}
 
@@ -84,14 +88,7 @@ export function GuidedRace({ lesson }: { lesson: RaceLesson }) {
         {/* narração: passos anteriores apagados, o atual em destaque */}
         {!done && <Narration beats={p.beats} current={beat} />}
 
-        {!done && cur?.ask && (
-          <Question
-            key={askKey}
-            ask={cur.ask}
-            answered={answered.has(askKey)}
-            onCorrect={() => setAnswered((a) => new Set(a).add(askKey))}
-          />
-        )}
+        {!done && cur?.ask && <Explain key={`${part}-${beat}`} ask={cur.ask} />}
 
         {!done && !scriptOver && !waitingAnswer && cur?.press === undefined && (
           <button onClick={() => setBeat((b) => b + 1)} className="btn-neon self-start px-3 py-1.5 text-xs">
@@ -136,9 +133,16 @@ export function GuidedRace({ lesson }: { lesson: RaceLesson }) {
 
         {done && <WrapUp lesson={lesson} nextId={next?.id} />}
 
-        <button onClick={() => restartPart()} className="btn-ghost flex items-center gap-1 self-start px-2 py-1 text-xs">
-          <RotateCcw size={12} /> Refazer {lesson.parts.length > 1 ? "esta parte" : "a aula"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => restartPart(0)} title="Volta para o começo da aula: história, parte 1 e transações zeradas" className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs">
+            <RotateCcw size={12} /> Reiniciar aula
+          </button>
+          {part > 0 && (
+            <button onClick={() => restartPart()} className="btn-ghost px-2 py-1 text-xs">
+              Refazer só a parte {part + 1}
+            </button>
+          )}
+        </div>
       </aside>
 
       <main className="flex flex-col gap-5">
@@ -177,42 +181,45 @@ function Narration({ beats, current }: { beats: Beat[]; current: number }) {
           className={k === current ? "pop-in rounded-md border border-accent/50 bg-accent/5 p-2 text-text" : "px-2 text-muted"}
         >
           {k === current && <span className="font-semibold text-accent">Mentor: </span>}
-          {b.say}
+          <Glossed text={b.say} />
         </li>
       ))}
     </ol>
   );
 }
 
-function Question({ ask, answered, onCorrect }: { ask: NonNullable<Beat["ask"]>; answered: boolean; onCorrect(): void }) {
-  const [tried, setTried] = useState<number[]>([]);
-  const last = tried[tried.length - 1];
+function Explain({ ask }: { ask: NonNullable<Beat["ask"]> }) {
+  const right = ask.choices.filter((c) => c.correct);
+  const wrong = ask.choices.filter((c) => !c.correct);
   return (
-    <div className="panel pop-in flex flex-col gap-1.5 border-accent-2/50 p-2.5">
-      <div className="text-[13px] font-semibold text-accent-2">{ask.q}</div>
-      {ask.choices.map((ch, k) => {
-        const picked = tried.includes(k);
-        const style = picked ? (ch.correct ? "border-ok text-ok bg-ok/10" : "border-down/70 text-down/90 bg-down/5 line-through") : "";
-        return (
-          <button
-            key={k}
-            disabled={picked || answered}
-            onClick={() => {
-              setTried([...tried, k]);
-              if (ch.correct) onCorrect();
-            }}
-            className={`btn-ghost px-2 py-1.5 text-left text-[13px] ${style}`}
-          >
-            <span className="mr-1.5 font-mono text-[11px] text-muted">{String.fromCharCode(65 + k)}</span>
-            {ch.text}
-          </button>
-        );
-      })}
-      {last !== undefined && (
-        <div className={`pop-in flex gap-1.5 text-[13px] ${ask.choices[last]!.correct ? "text-ok" : "text-down"}`}>
-          {ask.choices[last]!.correct ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <CircleX size={16} className="mt-0.5 shrink-0" />}
-          <span>{ask.choices[last]!.why}</span>
+    <div className="panel pop-in flex flex-col gap-2 border-accent-2/50 p-2.5 text-[13px] leading-relaxed">
+      <div className="flex items-center gap-1.5 font-semibold text-accent-2">
+        <Lightbulb size={14} /> {ask.q}
+      </div>
+      {right.map((c) => (
+        <div key={c.text} className="flex gap-1.5">
+          <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-ok" />
+          <span>
+            <span className="font-semibold text-ok">{c.text}. </span>
+            <Glossed text={c.why.replace(/^Isso\.\s*/, "")} />
+          </span>
         </div>
+      ))}
+      {wrong.length > 0 && (
+        <details className="text-[12px]">
+          <summary className="cursor-pointer text-muted hover:text-text">Erros comuns de raciocínio</summary>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {wrong.map((c) => (
+              <li key={c.text} className="flex gap-1.5">
+                <CircleX size={13} className="mt-0.5 shrink-0 text-down/80" />
+                <span>
+                  <span className="text-text">{c.text}: </span>
+                  <span className="text-muted">{c.why}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );

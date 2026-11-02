@@ -1,7 +1,41 @@
 "use client";
 
 import { KIND_LABEL } from "@sdp/sim-engine";
+import { HelpDot } from "@/components/glossary/Glossary";
 import { FIELDS } from "./defaults";
+
+/** Campo do painel → termo do glossário que o explica. */
+const FIELD_HELP: Record<string, string> = {
+  dailyActiveUsers: "dau",
+  requestsPerUserPerDay: "dau",
+  peakFactor: "fator-de-pico",
+  pattern: "padrao-de-trafego",
+  timeoutMs: "timeout",
+  writeRatio: "fracao-escritas",
+  readAfterWriteMs: "rele-depois",
+  algorithm: "least-outstanding",
+  workers: "workers",
+  serviceTimeMs: "tempo-de-servico",
+  queueCapacity: "fila-interna",
+  retries: "retries",
+  hitRate: "hit-rate",
+  readReplicas: "replica-de-leitura",
+  replicationDelayMs: "replication-lag",
+  readYourWritesMs: "read-your-writes",
+  capacity: "fila",
+  consumers: "fila",
+  errorRate: "externo",
+};
+const KIND_HELP: Record<string, string> = {
+  client: "usuarios",
+  loadBalancer: "load-balancer",
+  server: "servidor",
+  cache: "cache",
+  cdn: "cdn",
+  database: "banco",
+  queue: "fila",
+  external: "externo",
+};
 import { useCanvas } from "./store";
 
 export function Inspector() {
@@ -17,14 +51,18 @@ export function Inspector() {
 
   return (
     <div className="flex flex-col gap-3 text-sm">
-      <div className="hud-label">{KIND_LABEL[kind]}</div>
+      <div className="flex items-center gap-1.5 hud-label">
+        {KIND_LABEL[kind]} <HelpDot id={KIND_HELP[kind]!} label={KIND_LABEL[kind]} />
+      </div>
       <label className="flex flex-col gap-1">
         <span className="text-muted">Nome</span>
         <input value={label} onChange={(e) => updateNode(node.id, { label: e.target.value })} />
       </label>
       {FIELDS[kind].map((f) => (
         <label key={f.key} className="flex flex-col gap-1">
-          <span className="text-muted">{f.label}</span>
+          <span className="flex items-center gap-1.5 text-muted">
+            {f.label} {FIELD_HELP[f.key] && <HelpDot id={FIELD_HELP[f.key]!} label={f.label} />}
+          </span>
           {f.type === "number" ? (
             <input
               type="number"
@@ -52,6 +90,7 @@ export function Inspector() {
             onChange={(e) => setFailure(node.id, e.target.checked ? Math.round(durationSec / 3) : null)}
           />
           <span>Derrubar no segundo</span>
+          <HelpDot id="derrubar" />
           {failure && (
             <input
               type="number"

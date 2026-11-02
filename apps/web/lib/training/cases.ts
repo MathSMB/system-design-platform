@@ -57,6 +57,7 @@ const BASE: GuidedCase[] = [
       {
         type: "build",
         title: "O desenho mais simples",
+      solution: "Na paleta, clique em Servidor e em Banco de dados. Depois arraste da bolinha da direita do nó Usuários até o Servidor, e da bolinha do Servidor até o Banco. O desenho fica Usuários → Servidor → Banco. Por fim, clique em Simular.",
         body: "Comece simples, como o Renato faz: um servidor e um banco. O nó Usuários já está no canvas com esses números.",
         tasks: ["Adicione um Servidor e um Banco de dados", "Conecte Usuários → Servidor → Banco (arraste da bolinha da direita)", "Clique em ▶ Simular"],
         check: (b) =>
@@ -100,6 +101,7 @@ const BASE: GuidedCase[] = [
       {
         type: "build",
         title: "Escala horizontal",
+      solution: "Usuários → Load balancer → três Servidores → Banco. Apague a conexão antiga Usuários → Servidor (clique nela e aperte Delete). Ligue o Load balancer a cada um dos três servidores e cada servidor ao Banco. Com o pico em ~2.300 req/s, três servidores de 1.600 req/s cada somam 4.800 e sobram para perder um.",
         body: "Em vez de um servidor maior (escala vertical, que tem teto e continua sendo ponto único de falha), coloque vários iguais atrás de um load balancer.",
         tasks: ["Adicione um Load balancer entre Usuários e os servidores", "Tenha pelo menos 3 Servidores ligados ao LB e ao Banco", "▶ Simular com erros abaixo de 1%"],
         check: (b) =>
@@ -142,6 +144,7 @@ const BASE: GuidedCase[] = [
       {
         type: "build",
         title: "Cache na frente do banco",
+      solution: "Cada servidor liga só no Cache, e o Cache liga no Banco: Servidor → Cache → Banco. Apague as setas Servidor → Banco (clique na seta e aperte Delete); se ficarem, cada requisição vai ao cache e ao banco.",
         body: "Adicione um Cache (cache-aside, 90% de hit rate). Os servidores consultam o cache e só os misses vão ao banco.",
         tasks: ["Adicione um Cache", "Servidores → Cache → Banco (apague as conexões Servidor → Banco)", "Desmarque a queda do servidor, se ainda estiver marcada", "▶ Simular"],
         check: (b) => {
@@ -411,6 +414,7 @@ const BASE: GuidedCase[] = [
       {
         type: "build",
         title: "Monte e aguente a carga",
+      solution: "Usuários → Load balancer → Servidores → Cache → Banco. A conta: 11.600 req/s ÷ 1.600 req/s por servidor padrão dá pelo menos 8 servidores; uma alternativa mais rápida de montar é usar 3 ou 4 servidores e aumentar os workers de cada um (por exemplo, 128 workers aguentam ~6.400 req/s). Com 90% de hit rate, o banco recebe só os misses e as escritas. Se o Cache ou o Banco ficarem vermelhos, aumente os workers deles.",
         body: "Os Usuários já estão configurados com ~11.600 req/s (10 milhões × 100 por dia, fator de pico 1; 10% são escritas). Monte o resto e cumpra o SLO.",
         tasks: [
           "Load balancer, servidores, cache e banco",
