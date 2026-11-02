@@ -1,21 +1,12 @@
 "use client";
 
-import {
-  SCENARIOS,
-  createRun,
-  exploreAll,
-  getScenario,
-  isFinished,
-  runSchedule,
-  stepTx,
-  type ExploreSummary,
-  type RunState,
-} from "@sdp/race-sim";
+import { SCENARIOS, createRun, exploreAll, getScenario, runSchedule, stepTx, type ExploreSummary, type RunState } from "@sdp/race-sim";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { ExploreResult, Lanes, MODEL_NOTE, StatePanel, Timeline } from "./RaceParts";
 
-const LANE_COLORS = ["text-accent", "text-accent-2"];
-
+/** Laboratório livre: escolha um cenário e avance as transações na ordem que quiser. */
 export function RaceLab() {
   const params = useSearchParams();
   const router = useRouter();
@@ -31,17 +22,10 @@ export function RaceLab() {
     setSummary(null);
   }
 
-  const canStep = useMemo(() => scenario.txs.map((_, i) => stepTx(scenario, run, i) !== null), [scenario, run]);
-  const finished = isFinished(run);
-  const deadlock = !finished && canStep.every((c) => !c);
-  const verdict = finished ? scenario.invariant(run.db) : null;
-
-  const visibleRows = Object.entries(run.db.rows);
-
   return (
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[260px_1fr]">
       <aside className="flex flex-col gap-1">
-        <div className="mb-1 hud-label">Cenários</div>
+        <div className="mb-1 hud-label">Laboratório livre · cenários</div>
         {SCENARIOS.map((s) => (
           <button
             key={s.id}
@@ -51,6 +35,9 @@ export function RaceLab() {
             {s.title}
           </button>
         ))}
+        <Link href="/estudo/concorrencia" className="mt-3 rounded-md border border-accent-2/50 p-2 text-xs text-accent-2 hover:bg-accent-2/10">
+          Primeira vez? As aulas guiadas explicam cada passo →
+        </Link>
       </aside>
 
       <main className="flex flex-col gap-5">
@@ -59,121 +46,29 @@ export function RaceLab() {
           <p className="mt-1 text-muted">{scenario.description}</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {scenario.txs.map((tx, i) => {
-            const st = run.txs[i]!;
-            return (
-              <div key={tx.name} className="panel p-3">
-                <div className="flex items-center justify-between">
-                  <div className={`font-medium ${LANE_COLORS[i]}`}>{tx.name}</div>
-                  <button
-                    disabled={!canStep[i]}
-                    onClick={() => setRun(stepTx(scenario, run, i)!)}
-                    className={`btn-neon px-2 py-1 text-[11px] disabled:opacity-30 ${!st.done && !canStep[i] ? "shake" : ""}`}
-                  >
-                    {st.done ? "terminou" : canStep[i] ? "Avançar ▶" : "bloqueada 🔒"}
-                  </button>
-                </div>
-                {st.restarts > 0 && <div className="mt-1 text-[11px] text-warn">recomeçou {st.restarts}×</div>}
-                <ol className="mt-2 flex flex-col gap-1 font-mono text-xs">
-                  {tx.steps.map((s, j) => (
-                    <li
-                      key={j}
-                      className={`rounded px-2 py-1 ${j === st.pc && !st.done ? "bg-accent/15 text-text" : j < st.pc || st.done ? "text-muted line-through decoration-muted/40" : "text-muted"}`}
-                    >
-                      {j === st.pc && !st.done && <span className="cursor-blink mr-1 text-accent">▸</span>}
-                      {s.label}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            );
-          })}
-        </div>
+        <Lanes s={scenario} run={run} onStep={(i) => setRun(stepTx(scenario, run, i)!)} />
 
         <div className="flex flex-wrap gap-2 text-sm">
-          <button onClick={() => setRun(createRun(scenario))} className="btn-ghost px-3 py-1.5">Reiniciar</button>
+          <button onClick={() => setRun(createRun(scenario))} className="btn-ghost px-3 py-1.5">
+            Reiniciar
+          </button>
           <button onClick={() => setSummary(exploreAll(scenario))} className="btn-ghost px-3 py-1.5">
             Testar todas as ordens possíveis
           </button>
         </div>
 
-        {summary && (
-          <div className={`pop-in rounded-lg border p-3 text-sm ${summary.violations ? "border-bad/60 bg-bad/10" : "border-ok/50 bg-ok/10"}`}>
-            <div className="font-medium">
-              {summary.violations
-                ? `Em ${summary.violations} de ${summary.total} ordens possíveis a regra quebra${summary.deadlocks ? ` (${summary.deadlocks} com deadlock)` : ""}.`
-                : `Correto nas ${summary.total} ordens possíveis.`}
-            </div>
-            {summary.truncated && <div className="text-xs text-warn">Busca interrompida no limite de ordens.</div>}
-            {summary.example && (
-              <button onClick={() => setRun(runSchedule(scenario, summary.example!.schedule))} className="mt-2 text-xs text-accent hover:underline">
-                Reproduzir uma ordem com bug ({summary.example.verdict.message})
-              </button>
-            )}
-          </div>
-        )}
+        {summary && <ExploreResult sum={summary} onReplay={(sch) => setRun(runSchedule(scenario, sch))} />}
 
         <div className="grid gap-4 md:grid-cols-[1fr_240px]">
-          <div className="panel p-3">
-            <div className="mb-2 hud-label">Linha do tempo</div>
-            {run.trace.length === 0 ? (
-              <p className="text-sm text-muted">Avance as transações em qualquer ordem e veja o que acontece.</p>
-            ) : (
-              <table className="w-full font-mono text-xs">
-                <tbody>
-                  {run.trace.map((t, k) => (
-                    <tr key={k} className="pop-in align-top">
-                      <td className="pr-2 text-muted">{k + 1}</td>
-                      <td className={`pr-2 ${LANE_COLORS[t.tx]}`}>{scenario.txs[t.tx]!.name}</td>
-                      <td className="pr-2">{t.label}</td>
-                      <td className="text-muted">{t.note}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {verdict && (
-              <div className={`pop-in mt-3 rounded-md p-2 text-sm ${verdict.ok ? "bg-ok/10 text-ok" : "bg-bad/10 text-bad"}`}>{verdict.message}</div>
-            )}
-            {deadlock && <div className="pulse-bad mt-3 rounded-md border border-down/40 bg-down/10 p-2 text-sm text-down">Deadlock: cada transação espera um lock que a outra segura.</div>}
-          </div>
-
-          <div className="panel p-3 font-mono text-xs">
-            <div className="mb-2 hud-label">Estado confirmado</div>
-            {visibleRows.map(([k, r]) => (
-              <div key={k} className="flex justify-between">
-                <span className="text-muted">{k}</span>
-                <span>{r.value ?? "vazio"}</span>
-              </div>
-            ))}
-            <div className="mt-3 hud-label">Locks</div>
-            {Object.keys(run.db.locks).length === 0 ? (
-              <div className="text-muted">nenhum</div>
-            ) : (
-              Object.entries(run.db.locks).map(([k, tx]) => (
-                <div key={k}>🔒 {k} → <span className={LANE_COLORS[tx]}>{scenario.txs[tx]!.name}</span></div>
-              ))
-            )}
-            {run.db.log.length > 0 && (
-              <>
-                <div className="mt-3 hud-label">Eventos</div>
-                {run.db.log.map((l, k) => (
-                  <div key={k}>{l.event} <span className={LANE_COLORS[l.tx]}>({scenario.txs[l.tx]!.name})</span></div>
-                ))}
-              </>
-            )}
-          </div>
+          <Timeline s={scenario} run={run} />
+          <StatePanel s={scenario} run={run} />
         </div>
 
         <p className="panel p-3 text-sm text-muted">
           <strong className="text-text">Lição: </strong>
           {scenario.lesson}
         </p>
-        <p className="text-[11px] text-muted">
-          Modelo: Read Committed (padrão do PostgreSQL). Escritas dentro de BEGIN só aparecem para os outros no COMMIT;
-          UPDATE e SELECT FOR UPDATE travam a linha até o fim da transação.
-        </p>
+        <p className="text-[11px] text-muted">{MODEL_NOTE}</p>
       </main>
     </div>
   );

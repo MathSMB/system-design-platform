@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, CircleX, GraduationCap, PlayCircle, Trophy } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, CircleX, Cpu, GraduationCap, MessageSquareQuote, PlayCircle, RotateCcw, Trophy } from "lucide-react";
 import type { SimResult } from "@sdp/sim-engine";
-import { useCanvas } from "@/components/canvas/store";
+import { useCanvas, type Snapshot } from "@/components/canvas/store";
 import { CASES } from "@/lib/training/cases";
-import type { CheckOutcome, GuidedCase, Step } from "@/lib/training/types";
+import type { CheckOutcome, GuidedCase, Ref, Step } from "@/lib/training/types";
 import { readBoard } from "./useBoard";
 
 const KEY = (id: string) => `sdp-case-${id}`;
@@ -28,8 +28,10 @@ function saveProgress(id: string, step: number) {
 const fmt = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: x < 100 ? 1 : 0 });
 
 /** Painel do mentor: conduz o case etapa por etapa, pergunta, confere e ensina. */
-export function Coach({ c }: { c: GuidedCase }) {
+export function Coach({ c, onRestart }: { c: GuidedCase; onRestart(): void }) {
   const [i, setI] = useState(0);
+  // desenho de quando cada etapa começou, para o "Reiniciar desenho"
+  const snaps = useRef(new Map<number, Snapshot>());
   const [passed, setPassed] = useState<boolean[]>(() => c.steps.map(() => false));
   const done = i >= c.steps.length;
 
@@ -40,8 +42,14 @@ export function Coach({ c }: { c: GuidedCase }) {
   }, [c]);
 
   const go = (k: number) => {
+    if (!snaps.current.has(k)) snaps.current.set(k, useCanvas.getState().snapshot());
     setI(k);
     if (k > loadProgress(c.id)) saveProgress(c.id, k);
+  };
+  const resetBoard = () => {
+    const snap = snaps.current.get(i);
+    if (snap) useCanvas.getState().restore(snap);
+    else onRestart(); // etapa aberta direto (progresso salvo): volta ao desenho inicial do case
   };
   const markPassed = () => setPassed((p) => p.map((x, k) => (k === i ? true : x)));
 
@@ -65,6 +73,13 @@ export function Coach({ c }: { c: GuidedCase }) {
         </a>
       )}
 
+      {c.story && (
+        <details open={i === 0} className="panel group p-2.5 text-[13px] leading-relaxed text-muted">
+          <summary className="cursor-pointer list-none hud-label !text-accent-2">▸ A história</summary>
+          <p className="mt-1.5 text-text/90">{c.story}</p>
+        </details>
+      )}
+
       {/* barra de progresso estilo fase de jogo */}
       <div className="flex gap-1">
         {c.steps.map((_, k) => (
@@ -82,15 +97,15 @@ export function Coach({ c }: { c: GuidedCase }) {
         <div className="panel pop-in flex flex-col items-center gap-3 p-4 text-center">
           <Trophy size={36} className="text-warn" style={{ filter: "drop-shadow(0 0 8px var(--warn))" }} />
           <div className="font-display text-[11px] leading-relaxed text-warn glow">Case concluído!</div>
-          <p className="text-sm text-muted">Agora tente sem ajuda: o modo Desafio sorteia um problema e só mostra o enunciado.</p>
+          <p className="text-sm text-muted">Agora tente sem ajuda: na Entrevista técnica o entrevistador só passa o enunciado.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {next && (
-              <Link href={`/treinos/${next.id}`} className="btn-neon px-3 py-1.5 text-xs">
-                Próximo case ▶
+              <Link href={`/estudo/system-design/${next.id}`} className="btn-neon px-3 py-1.5 text-xs">
+                Próxima aula ▶
               </Link>
             )}
-            <Link href="/desafio" className="btn-ghost px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
-              Desafio sorteado
+            <Link href="/entrevista/system-design" className="btn-ghost px-3 py-1.5 text-xs font-semibold uppercase tracking-wider">
+              Entrevista técnica
             </Link>
             <button onClick={() => go(0)} className="btn-ghost px-3 py-1.5 text-xs">
               Refazer
@@ -101,10 +116,15 @@ export function Coach({ c }: { c: GuidedCase }) {
         <StepView key={`${c.id}-${i}`} step={c.steps[i]!} index={i} total={c.steps.length} passed={passed[i]!} onPass={markPassed} />
       )}
 
+      {done && <WrapUp c={c} />}
+
       {!done && (
         <div className="flex justify-between">
           <button onClick={() => go(Math.max(0, i - 1))} disabled={i === 0} className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs disabled:opacity-30">
             <ChevronLeft size={14} /> Voltar
+          </button>
+          <button onClick={resetBoard} title="Volta o desenho para como estava no começo desta etapa (dá para desfazer com Ctrl+Z)" className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs">
+            <RotateCcw size={13} /> Reiniciar desenho
           </button>
           <button
             onClick={() => go(i + 1)}
@@ -116,6 +136,76 @@ export function Coach({ c }: { c: GuidedCase }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Fechamento da aula: como falar na entrevista, tecnologias e o que estudar. */
+function WrapUp({ c }: { c: GuidedCase }) {
+  return (
+    <div className="flex flex-col gap-3 text-[13px]">
+      {c.talk && (
+        <Section icon={<MessageSquareQuote size={14} />} title="Como falar na entrevista">
+          <ul className="flex flex-col gap-1.5">
+            {c.talk.map((t) => (
+              <li key={t} className="flex gap-1.5 leading-relaxed text-text">
+                <span className="text-accent">“</span>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+      {c.tech && (
+        <Section icon={<Cpu size={14} />} title="Tecnologias usadas hoje">
+          <div className="flex flex-wrap gap-1.5">
+            {c.tech.map((t) => (
+              <span key={t} className="rounded border border-border bg-bg/60 px-1.5 py-0.5 font-mono text-[11px] text-text">
+                {t}
+              </span>
+            ))}
+          </div>
+        </Section>
+      )}
+      {c.study && (
+        <Section icon={<BookOpen size={14} />} title="Para estudar">
+          <RefList refs={c.study} />
+          <Link href="/bibliografia" className="mt-1 text-xs text-accent hover:underline">
+            Bibliografia completa →
+          </Link>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="panel pop-in flex flex-col gap-2 p-3">
+      <div className="flex items-center gap-1.5 hud-label">
+        {icon} {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export function RefList({ refs }: { refs: Ref[] }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {refs.map((r) => (
+        <li key={r.title} className="leading-snug">
+          {r.url ? (
+            <a href={r.url} target="_blank" rel="noreferrer" className="text-text hover:text-accent">
+              {r.title}
+            </a>
+          ) : (
+            <span className="text-text">{r.title}</span>
+          )}
+          {r.by && <span className="text-muted"> · {r.by}</span>}
+          {r.note && <div className="text-xs text-muted">{r.note}</div>}
+        </li>
+      ))}
+    </ul>
   );
 }
 

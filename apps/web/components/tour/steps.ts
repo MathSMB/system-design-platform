@@ -38,8 +38,8 @@ export const CANVAS_TOUR: TourStep[] = [
     body: "Salve o que montou para continuar depois.",
   },
   {
-    target: "nav-treinos",
+    target: "nav-estudo",
     title: "Hora de treinar",
-    body: "Em Treinos, um mentor conduz cases passo a passo e ensina. Em Desafio, você recebe um problema sorteado, sem dica, como numa entrevista.",
+    body: "Em Estudo, um mentor conduz aulas passo a passo e ensina. Em Entrevista, um entrevistador sem dicas passa o problema e dá a nota no fim.",
   },
 ];

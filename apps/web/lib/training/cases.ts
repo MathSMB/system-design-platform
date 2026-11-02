@@ -1,6 +1,8 @@
 import { PRESETS, type Graph } from "@sdp/sim-engine";
 import { DEFAULT_PARAMS } from "@/components/canvas/defaults";
 import { all, clientPeakRps, count, linked, metricsOf, ofKind, reaches, SIMULATE } from "./checks";
+import { yt } from "./graph";
+import { BROKER_CASE, CQRS_CASE, LB_CASE, MICRO_CASE, N_PLUS_ONE_CASE, PASSWORD_CASE, QUEUE_CASE, RETRY_CASE } from "./study-sd";
 import type { GuidedCase } from "./types";
 
 const onlyUsers = (params: Record<string, unknown> = {}): Graph =>
@@ -15,13 +17,15 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
  * Cases guiados: o mentor conduz a entrevista no roteiro do Renato Augusto
  * (requisitos → estimativas → desenho incremental → gargalos → trade-offs) e ensina em cada etapa.
  */
-export const CASES: GuidedCase[] = [
+const BASE: GuidedCase[] = [
   {
     id: "zero-a-um-milhao",
     title: "De 0 a 1 milhão de usuários",
     summary: "Comece com um servidor, ache o gargalo, escale na horizontal e proteja o banco com cache.",
     level: "básico",
     video: { id: "9g7twJrXqoY", title: "Escalando do zero a 1 milhão de usuários" },
+    story:
+      "Um app de receitas viralizou: em semanas foi de alguns milhares para 1 milhão de usuários ativos por dia. Ele ainda roda num servidor só, ligado a um Postgres. O CTO quer saber o que muda no desenho antes da campanha de marketing do mês que vem.",
     start: onlyUsers(),
     steps: [
       {
@@ -166,13 +170,26 @@ export const CASES: GuidedCase[] = [
           "Pontos que valem citar: o banco continua sendo ponto único de falha (faltam réplica e failover); o cache pode devolver dado velho até o TTL expirar; se o cache cair, todo o tráfego cai no banco de uma vez (avalanche — é o próximo case); o próprio LB precisa de redundância. Com 10× mais carga: réplicas de leitura, e só depois sharding.",
       },
     ],
+    talk: [
+      "Antes de desenhar, transformo requisito em número: usuários por dia, requisições por usuário e pico, e daí as requisições por segundo.",
+      "Começo simples e escalo pelo gargalo: servidores stateless atrás de um LB, e o banco protegido por cache antes de pensar em sharding.",
+      "Dimensiono com N − 1: o sistema tem que aguentar perder uma máquina no pico.",
+    ],
+    tech: ["NGINX / HAProxy", "AWS ALB", "Redis", "PostgreSQL", "Kubernetes"],
+    study: [
+      yt("9g7twJrXqoY", "Escalando do zero a 1 milhão de usuários"),
+      { title: "System Design Interview, vol. 1, cap. 1: Scale from zero to millions of users", by: "Alex Xu" },
+      { title: "The System Design Primer", by: "Donne Martin", url: "https://github.com/donnemartin/system-design-primer" },
+    ],
   },
   {
     id: "avalanche-de-cache",
-    title: "Cache-aside e avalanche",
+    title: "Cache-aside: hit rate e avalanche",
     summary: "Entenda o efeito do hit rate no banco e o que acontece quando o cache cai.",
     level: "intermediário",
     video: { id: "vRO0UfvsbDw", title: "Cache-Aside" },
+    story:
+      "O sistema do case anterior vai bem: LB, 3 servidores, Redis com 90% de hit rate e um Postgres folgado. Numa madrugada, o Redis reinicia por falta de memória e, em segundos, o Postgres vai a 100% e o site sai do ar. Ninguém mexeu no banco.",
     start: PRESETS.withCache!.graph,
     steps: [
       {
@@ -241,6 +258,17 @@ export const CASES: GuidedCase[] = [
           "O padrão é gravar no banco e apagar a chave do cache (não atualizar). Mesmo assim existe a corrida do \"stale set\": um leitor lê o valor antigo do banco, o escritor grava e apaga a chave, e o leitor grava o valor antigo no cache. Mitigações: TTL curto como rede de segurança, apagar de novo com atraso, ou versionar o valor. Dá para ver essa corrida passo a passo no laboratório de Concorrência (\"Cache-aside: cache com valor velho\").",
       },
     ],
+    talk: [
+      "No cache-aside o banco só vê os misses: subir o hit rate de 90% para 99% divide por 10 a carga no banco.",
+      "Se o cache cai, o banco recebe tudo de uma vez (avalanche): cache redundante, rate limit ou circuit breaker na frente do banco, e aquecer antes de liberar tráfego.",
+      "Na escrita, gravo no banco e apago a chave; TTL é a rede de segurança para valor velho.",
+    ],
+    tech: ["Redis (Sentinel / Cluster)", "Memcached", "Amazon ElastiCache", "Valkey"],
+    study: [
+      yt("vRO0UfvsbDw", "Cache-Aside"),
+      { title: "Padrão Cache-Aside", by: "Microsoft Learn", url: "https://learn.microsoft.com/pt-br/azure/architecture/patterns/cache-aside" },
+      { title: "Scaling Memcache at Facebook", by: "Nishtala et al. (NSDI 2013)", note: "Leases contra stampede e valor velho." },
+    ],
   },
   {
     id: "replicas-de-leitura",
@@ -248,6 +276,8 @@ export const CASES: GuidedCase[] = [
     summary: "Escale leituras com réplicas e resolva o usuário que não vê a própria escrita.",
     level: "intermediário",
     video: { id: "bhw4-Kq_RPs", title: "Como escolher o banco (CAP e PACELC)" },
+    story:
+      "Uma rede social adicionou réplicas de leitura para aguentar o crescimento, e a carga do banco ficou ótima. Mas o suporte começou a receber reclamações: \"publiquei e o post sumiu\", \"mudei a foto e voltou a antiga\". Ao recarregar a página uns segundos depois, aparece.",
     start: PRESETS.readReplicas!.graph,
     steps: [
       {
@@ -307,6 +337,16 @@ export const CASES: GuidedCase[] = [
           "Replicação síncrona faz o commit esperar a réplica confirmar: toda escrita fica mais lenta (é o \"E → L ou C\" do PACELC: sem partição, você escolhe latência ou consistência). E, se a réplica ou a rede cair, as escritas travam (no CAP, com partição, você escolhe consistência ou disponibilidade). Por isso o comum é assíncrono com read-your-writes onde importa.",
       },
     ],
+    talk: [
+      "Réplica escala leitura; escrita continua no primário.",
+      "Com replicação assíncrona existe replication lag: quem acabou de escrever pode ler da réplica e não ver a própria escrita.",
+      "Read-your-writes: depois de escrever, o usuário lê do primário por uma janela maior que o lag (ou espera a réplica alcançar a posição do WAL).",
+    ],
+    tech: ["PostgreSQL streaming replication", "Amazon Aurora replicas", "MySQL replication", "ProxySQL / pgpool"],
+    study: [
+      yt("bhw4-Kq_RPs", "Como escolher o banco (CAP e PACELC)"),
+      { title: "Designing Data-Intensive Applications, cap. 5: Replication", by: "Martin Kleppmann", note: "Seção \"Reading Your Own Writes\"." },
+    ],
   },
   {
     id: "encurtador-de-url",
@@ -314,6 +354,8 @@ export const CASES: GuidedCase[] = [
     summary: "Estimativas de entrevista, tamanho do código curto e um desenho que aguenta 11 mil leituras por segundo.",
     level: "avançado",
     video: { id: "m_anIoKW7Jg", title: "Encurtador de URL" },
+    story:
+      "Você está na entrevista e o enunciado é curto: \"Projete um encurtador de URL, como o bit.ly\". O entrevistador espera que você conduza: perguntas, contas, escolha do código curto, desenho e trade-offs.",
     start: onlyUsers({ dailyActiveUsers: 10_000_000, requestsPerUserPerDay: 100, peakFactor: 1, writeRatio: 0.1 }),
     steps: [
       {
@@ -396,7 +438,35 @@ export const CASES: GuidedCase[] = [
           "O acesso é quase só chave → valor, com 1.160 escritas/s e 36,5 TB em 10 anos. Um key-value ou wide-column (DynamoDB, Cassandra) escala isso horizontalmente sem esforço. Um Postgres também aguenta as escritas, mas 36 TB pedem particionamento e, no fim, sharding. Qualquer escolha vale se você justificar: padrão de acesso, volume e consistência necessária (o código precisa ser único, o resto tolera consistência eventual).",
       },
     ],
+    talk: [
+      "Faço as contas antes: ~1.160 escritas/s, ~11.600 leituras/s e ~36,5 TB em 10 anos; é um sistema de leitura pesada.",
+      "Código de 7 caracteres em base62 (62⁷ ≈ 3,5 trilhões), gerado por faixas de IDs por servidor para não colidir.",
+      "Cache na frente do banco para os links quentes; 302 se precisa contar cliques, 301 se quer aliviar o servidor.",
+    ],
+    tech: ["Redis", "DynamoDB / Cassandra", "PostgreSQL", "CDN", "Snowflake ID"],
+    study: [
+      yt("m_anIoKW7Jg", "Encurtador de URL"),
+      { title: "System Design Interview, vol. 1, cap. 8: Design a URL shortener", by: "Alex Xu" },
+    ],
   },
+];
+
+const byId = (id: string) => BASE.find((c) => c.id === id)!;
+
+/** Aulas de System Design, na ordem da trilha. */
+export const CASES: GuidedCase[] = [
+  byId("zero-a-um-milhao"),
+  LB_CASE,
+  byId("avalanche-de-cache"),
+  N_PLUS_ONE_CASE,
+  byId("replicas-de-leitura"),
+  CQRS_CASE,
+  QUEUE_CASE,
+  MICRO_CASE,
+  BROKER_CASE,
+  RETRY_CASE,
+  PASSWORD_CASE,
+  byId("encurtador-de-url"),
 ];
 
 export const getCase = (id: string) => CASES.find((c) => c.id === id);

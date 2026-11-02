@@ -39,6 +39,15 @@ export type Step =
   /** Resposta livre; depois mostra a resposta de referência. */
   | { type: "open"; title: string; body: string; reference: string };
 
+/** Material de estudo citado no fim de uma aula ou na bibliografia. */
+export interface Ref {
+  title: string;
+  by?: string;
+  url?: string;
+  /** O que ler ou assistir ali (capítulo, trecho). */
+  note?: string;
+}
+
 export interface GuidedCase {
   id: string;
   title: string;
@@ -46,9 +55,17 @@ export interface GuidedCase {
   level: "básico" | "intermediário" | "avançado";
   /** Vídeo do Renato Augusto que inspira o caso. */
   video?: { id: string; title: string };
+  /** A história que abre a aula: quem sofre, o que está acontecendo. */
+  story?: string;
   /** Desenho inicial do canvas. */
   start: Graph;
   steps: Step[];
+  /** "Como falar na entrevista": frases curtas que resumem o raciocínio. */
+  talk?: string[];
+  /** Tecnologias usadas hoje para isso. */
+  tech?: string[];
+  /** Para estudar (fontes ficam só no fim). */
+  study?: Ref[];
 }
 
 export interface Challenge {
@@ -62,4 +79,8 @@ export interface Challenge {
   slo: { p99Ms: number; errorRate: number };
   /** Componentes que o enunciado exige (ex.: provedor externo). */
   mustHave?: { kind: NodeKind; label: string; params: Record<string, unknown> }[];
+  /** Perguntas de requisito que o entrevistador faz antes do desenho. */
+  ask?: Extract<Step, { type: "choice" }>[];
+  /** Perguntas de aprofundamento depois do desenho. */
+  followUps?: Extract<Step, { type: "choice" }>[];
 }

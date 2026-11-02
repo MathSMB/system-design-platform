@@ -1,10 +1,7 @@
-import { Suspense } from "react";
-import { ChallengeCanvas } from "@/components/training/ChallengeCanvas";
+import { redirect } from "next/navigation";
 
-export default function DesafioPage() {
-  return (
-    <Suspense>
-      <ChallengeCanvas />
-    </Suspense>
-  );
+/** Endereço antigo: o desafio sorteado virou Entrevista técnica. */
+export default async function Desafio({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
+  const { c } = await searchParams;
+  redirect(c ? `/entrevista/system-design/${c}` : "/entrevista/system-design");
 }

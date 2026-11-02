@@ -9,8 +9,11 @@ import { Coach } from "./Coach";
 export function CaseCanvas({ id }: { id: string }) {
   const c = getCase(id)!;
   const setup = useCallback(() => {
-    useCanvas.getState().loadGraph(c.start);
-    useCanvas.getState().set({ problem: `${c.title}: ${c.summary}` });
+    const s = useCanvas.getState();
+    s.loadGraph(c.start);
+    // os Usuários definem a carga da aula: não podem ser apagados
+    s.setLocked(c.start.nodes.filter((n) => n.kind === "client").map((n) => n.id));
+    s.set({ problem: `${c.title}: ${c.summary}` });
   }, [c]);
-  return <Canvas coach={<Coach c={c} />} setup={setup} />;
+  return <Canvas coach={<Coach c={c} onRestart={setup} />} setup={setup} />;
 }

@@ -25,10 +25,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="cursor-blink">_</span>
           </Link>
           <nav className="flex gap-5 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
-            <Link href="/canvas" className="transition-colors hover:text-accent">Canvas de carga</Link>
-            <Link href="/treinos" className="transition-colors hover:text-accent" data-tour="nav-treinos">Treinos</Link>
-            <Link href="/desafio" className="transition-colors hover:text-accent-2">Desafio</Link>
-            <Link href="/concorrencia" className="transition-colors hover:text-accent">Concorrência</Link>
+            <Link href="/estudo" className="transition-colors hover:text-accent" data-tour="nav-estudo">Estudo</Link>
+            <Link href="/entrevista" className="transition-colors hover:text-accent-2">Entrevista</Link>
+            <Link href="/canvas" className="transition-colors hover:text-accent">Canvas livre</Link>
+            <Link href="/concorrencia" className="transition-colors hover:text-accent-2">Lab. concorrência</Link>
+            <Link href="/bibliografia" className="transition-colors hover:text-accent">Bibliografia</Link>
           </nav>
           {/* linha neon sob o cabeçalho */}
           <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-[linear-gradient(90deg,transparent,var(--accent)_30%,var(--accent-2)_70%,transparent)] opacity-60" />

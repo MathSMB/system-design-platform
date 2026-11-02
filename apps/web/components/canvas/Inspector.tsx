@@ -8,6 +8,7 @@ export function Inspector() {
   const node = useCanvas((s) => s.nodes.find((n) => n.id === s.selectedId));
   const failure = useCanvas((s) => s.failures.find((f) => f.nodeId === s.selectedId));
   const { updateNode, removeSelected, setFailure, durationSec } = useCanvas.getState();
+  const locked = useCanvas((s) => (s.selectedId ? s.locked.includes(s.selectedId) : false));
 
   if (!node) {
     return <p className="text-sm text-muted">Selecione um componente para editar os parâmetros. Conecte arrastando da bolinha da direita.</p>;
@@ -62,7 +63,11 @@ export function Inspector() {
           )}
         </label>
       )}
-      <button onClick={removeSelected} className="mt-2 self-start text-xs text-down hover:underline">Remover componente</button>
+      {locked ? (
+        <span className="mt-2 text-xs text-muted">🔒 Faz parte do enunciado: não pode ser removido.</span>
+      ) : (
+        <button onClick={removeSelected} className="mt-2 self-start text-xs text-down hover:underline">Remover componente</button>
+      )}
     </div>
   );
 }

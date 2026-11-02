@@ -4,7 +4,7 @@ import { Background, BackgroundVariant, Controls, MarkerType, MiniMap, ReactFlow
 import { PRESETS, type NodeKind } from "@sdp/sim-engine";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Keyboard } from "lucide-react";
 import { Tour } from "@/components/tour/Tour";
 import { CANVAS_TOUR } from "@/components/tour/steps";
 import { DesignsBar } from "./DesignsBar";
@@ -12,6 +12,7 @@ import { EvaluationPanel } from "./EvaluationPanel";
 import { Inspector } from "./Inspector";
 import { Palette } from "./Palette";
 import { ResultsPanel } from "./ResultsPanel";
+import { ShortcutsHelp, useCanvasShortcuts, useToast } from "./Shortcuts";
 import { SystemNode } from "./SystemNode";
 import { TrafficEdge } from "./TrafficEdge";
 import { useCanvas } from "./store";
@@ -21,10 +22,13 @@ const nodeTypes = { system: SystemNode };
 const edgeTypes = { traffic: TrafficEdge };
 const ARROW_END = { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "#3f6f8f" };
 
-function Board() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, select } = useCanvas();
+function Board({ run, openHelp }: { run: () => void; openHelp: () => void }) {
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, select, checkpoint } = useCanvas();
   const layoutVersion = useCanvas((s) => s.layoutVersion);
+  const locked = useCanvas((s) => s.locked);
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const toast = useToast();
+  useCanvasShortcuts(run, toast.show, openHelp);
 
   // reenquadra quando uma trilha ou um desenho salvo é carregado
   useEffect(() => {
@@ -40,10 +44,13 @@ function Board() {
 
   // toda aresta mostra o tráfego com setinhas andando (TrafficEdge)
   const styledEdges = edges.map((e) => ({ ...e, type: "traffic", markerEnd: ARROW_END }));
+  // travados (Usuários nos modos Estudo/Entrevista) não podem ser apagados
+  const styledNodes = locked.length ? nodes.map((n) => (locked.includes(n.id) ? { ...n, deletable: false } : n)) : nodes;
 
   return (
+    <>
     <ReactFlow
-      nodes={nodes}
+      nodes={styledNodes}
       edges={styledEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
@@ -51,6 +58,8 @@ function Board() {
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
       onNodeClick={(_, n) => select(n.id)}
+      onNodeDragStart={() => checkpoint()}
+      onSelectionDragStart={() => checkpoint()}
       onPaneClick={() => select(null)}
       onDrop={onDrop}
       onDragOver={(e) => e.preventDefault()}
@@ -66,6 +75,12 @@ function Board() {
       <Controls />
       <MiniMap pannable zoomable nodeColor="#22e4ff" nodeStrokeWidth={0} maskColor="rgba(5,6,11,0.65)" />
     </ReactFlow>
+    {toast.msg && (
+      <div key={toast.msg.key} className="panel pop-in pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 font-mono text-xs text-accent">
+        {toast.msg.text}
+      </div>
+    )}
+    </>
   );
 }
 
@@ -87,6 +102,7 @@ function freeSlot() {
 export function Canvas({ coach, setup }: { coach?: ReactNode; setup?: () => void } = {}) {
   const params = useSearchParams();
   const [tourOpen, setTourOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [tab, setTab] = useState<"sim" | "ai">("sim");
   const { loadPreset, addNode, set } = useCanvas.getState();
   const durationSec = useCanvas((s) => s.durationSec);
@@ -122,7 +138,7 @@ export function Canvas({ coach, setup }: { coach?: ReactNode; setup?: () => void
 
       <section className="relative bg-bg" data-tour="board">
         <ReactFlowProvider>
-          <Board />
+          <Board run={run} openHelp={() => setHelpOpen(true)} />
         </ReactFlowProvider>
         {running && (
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -136,8 +152,11 @@ export function Canvas({ coach, setup }: { coach?: ReactNode; setup?: () => void
           <button onClick={run} disabled={running} className="btn-neon px-3 py-1 text-xs disabled:opacity-50">
             {running ? "Simulando…" : "▶ Simular"}
           </button>
+          <button onClick={() => setHelpOpen(true)} title="Atalhos de teclado (?)" className="ml-1 text-muted transition-colors hover:text-accent">
+            <Keyboard size={18} />
+          </button>
           {!coach && (
-            <button onClick={() => setTourOpen(true)} title="Tour pela tela" className="ml-1 text-muted transition-colors hover:text-accent">
+            <button onClick={() => setTourOpen(true)} title="Tour pela tela" className="text-muted transition-colors hover:text-accent">
               <HelpCircle size={18} />
             </button>
           )}
@@ -157,6 +176,7 @@ export function Canvas({ coach, setup }: { coach?: ReactNode; setup?: () => void
         </div>
         <div className="p-3">{tab === "sim" ? <ResultsPanel /> : <EvaluationPanel />}</div>
       </aside>
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       {!coach && <Tour steps={CANVAS_TOUR} storageKey="sdp-tour-canvas-v1" open={tourOpen} onClose={() => setTourOpen(false)} />}
     </div>
   );

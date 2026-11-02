@@ -14,6 +14,18 @@ export interface SavedDocument {
   problem: string;
 }
 
+/** Foto do desenho para desfazer/refazer. */
+export interface Snapshot {
+  nodes: SysNode[];
+  edges: Edge[];
+  failures: FailureInjection[];
+}
+
+const HISTORY = 50;
+/** Área de transferência do canvas (só dentro da aba). */
+let clipboard: { nodes: SysNode[]; edges: Edge[] } | null = null;
+let pasteCount = 0;
+
 interface CanvasState {
   nodes: SysNode[];
   edges: Edge[];
@@ -31,6 +43,22 @@ interface CanvasState {
   graphVersion: number;
   /** graphVersion do desenho que gerou o resultado atual; diferente = resultado desatualizado. */
   resultVersion: number;
+  past: Snapshot[];
+  future: Snapshot[];
+  /** Componentes que não podem ser apagados (Usuários e exigidos nos modos Estudo/Entrevista). */
+  locked: string[];
+  /** Guarda o desenho atual no histórico antes de uma mudança. */
+  checkpoint(): void;
+  undo(): void;
+  redo(): void;
+  copySelection(): number;
+  paste(): number;
+  duplicateSelection(): number;
+  selectAll(): void;
+  /** Foto do desenho (para "Reiniciar desenho"). */
+  snapshot(): Snapshot;
+  restore(s: Snapshot): void;
+  setLocked(ids: string[]): void;
   onNodesChange(c: NodeChange<SysNode>[]): void;
   onEdgesChange(c: EdgeChange[]): void;
   onConnect(c: Connection): void;
@@ -48,6 +76,7 @@ interface CanvasState {
 }
 
 let counter = 0;
+let lastEdit = { id: "", at: 0 };
 const newId = (kind: string) => `${kind}-${Date.now().toString(36)}-${counter++}`;
 
 /** Layout simples em colunas, pela profundidade no grafo. */
@@ -87,18 +116,110 @@ export const useCanvas = create<CanvasState>((set, get) => ({
   layoutVersion: 0,
   graphVersion: 0,
   resultVersion: -1,
+  past: [],
+  future: [],
+  locked: [],
 
-  onNodesChange: (c) =>
+  checkpoint: () => {
+    const { nodes, edges, failures, past } = get();
+    set({ past: [...past.slice(-(HISTORY - 1)), { nodes, edges, failures }], future: [] });
+  },
+  undo: () => {
+    const { past, future, nodes, edges, failures, graphVersion } = get();
+    const prev = past[past.length - 1];
+    if (!prev) return;
+    set({
+      ...prev,
+      past: past.slice(0, -1),
+      future: [{ nodes, edges, failures }, ...future].slice(0, HISTORY),
+      selectedId: null,
+      graphVersion: graphVersion + 1,
+    });
+  },
+  redo: () => {
+    const { past, future, nodes, edges, failures, graphVersion } = get();
+    const next = future[0];
+    if (!next) return;
+    set({ ...next, future: future.slice(1), past: [...past, { nodes, edges, failures }], selectedId: null, graphVersion: graphVersion + 1 });
+  },
+  copySelection: () => {
+    const sel = get().nodes.filter((n) => n.selected || n.id === get().selectedId);
+    const ids = new Set(sel.map((n) => n.id));
+    clipboard = { nodes: sel, edges: get().edges.filter((e) => ids.has(e.source) && ids.has(e.target)) };
+    pasteCount = 0;
+    return sel.length;
+  },
+  paste: () => {
+    if (!clipboard || clipboard.nodes.length === 0) return 0;
+    get().checkpoint();
+    pasteCount++;
+    const map = new Map<string, string>();
+    const nodes = clipboard.nodes.map((n) => {
+      const id = newId(n.data.kind);
+      map.set(n.id, id);
+      return {
+        ...n,
+        id,
+        selected: true,
+        position: { x: n.position.x + 40 * pasteCount, y: n.position.y + 40 * pasteCount },
+        data: { ...n.data, params: { ...n.data.params } },
+      };
+    });
+    const edges = clipboard.edges.map((e) => ({ ...e, id: newId("e"), source: map.get(e.source)!, target: map.get(e.target)!, selected: false }));
+    set({
+      nodes: [...get().nodes.map((n) => ({ ...n, selected: false })), ...nodes],
+      edges: [...get().edges, ...edges],
+      selectedId: nodes.length === 1 ? nodes[0]!.id : null,
+      graphVersion: get().graphVersion + 1,
+    });
+    return nodes.length;
+  },
+  duplicateSelection: () => {
+    const saved = clipboard;
+    const savedCount = pasteCount;
+    const n = get().copySelection();
+    if (n) get().paste();
+    clipboard = saved;
+    pasteCount = savedCount;
+    return n;
+  },
+  selectAll: () => set({ nodes: get().nodes.map((n) => ({ ...n, selected: true })), selectedId: null }),
+  snapshot: () => {
+    const { nodes, edges, failures } = get();
+    return { nodes, edges, failures };
+  },
+  restore: (snap) => {
+    get().checkpoint();
+    set({ ...snap, selectedId: null, result: null, graphVersion: get().graphVersion + 1, layoutVersion: get().layoutVersion + 1 });
+  },
+  setLocked: (ids) => set({ locked: ids }),
+
+  onNodesChange: (c) => {
+    const locked = get().locked;
+    // componentes travados não saem nem com Delete
+    c = c.filter((x) => !(x.type === "remove" && locked.includes(x.id)));
+    const structural = c.some((x) => x.type === "add" || x.type === "remove" || x.type === "replace");
+    if (structural) get().checkpoint();
+    const removed = new Set(c.filter((x) => x.type === "remove").map((x) => (x as { id: string }).id));
     set({
       nodes: applyNodeChanges(c, get().nodes),
+      failures: removed.size ? get().failures.filter((f) => !removed.has(f.nodeId)) : get().failures,
       // mover, selecionar ou medir não muda o sistema
-      graphVersion: get().graphVersion + (c.some((x) => x.type === "add" || x.type === "remove" || x.type === "replace") ? 1 : 0),
-    }),
-  onEdgesChange: (c) =>
-    set({ edges: applyEdgeChanges(c, get().edges), graphVersion: get().graphVersion + (c.some((x) => x.type !== "select") ? 1 : 0) }),
-  onConnect: (c) => set({ edges: addEdge({ ...c, id: newId("e") }, get().edges), graphVersion: get().graphVersion + 1 }),
+      graphVersion: get().graphVersion + (structural ? 1 : 0),
+    });
+  },
+  onEdgesChange: (c) => {
+    const structural = c.some((x) => x.type !== "select");
+    if (structural) get().checkpoint();
+    set({ edges: applyEdgeChanges(c, get().edges), graphVersion: get().graphVersion + (structural ? 1 : 0) });
+  },
+  onConnect: (c) => {
+    get().checkpoint();
+    set({ edges: addEdge({ ...c, id: newId("e") }, get().edges), graphVersion: get().graphVersion + 1 });
+  },
 
   addNode: (kind, position) => {
+    get().checkpoint();
     const id = newId(kind);
     set({
       nodes: [...get().nodes, { id, type: "system", position, data: { kind, label: KIND_LABEL[kind], params: { ...DEFAULT_PARAMS[kind] } } }],
@@ -107,14 +228,20 @@ export const useCanvas = create<CanvasState>((set, get) => ({
     });
   },
   select: (id) => set({ selectedId: id }),
-  updateNode: (id, patch) =>
+  updateNode: (id, patch) => {
+    // várias teclas seguidas no mesmo campo viram um passo só de desfazer
+    const now = Date.now();
+    if (now - lastEdit.at > 1000 || lastEdit.id !== id) get().checkpoint();
+    lastEdit = { id, at: now };
     set({
       nodes: get().nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)),
       graphVersion: get().graphVersion + 1,
-    }),
+    });
+  },
   removeSelected: () => {
     const id = get().selectedId;
-    if (!id) return;
+    if (!id || get().locked.includes(id)) return;
+    get().checkpoint();
     set({
       nodes: get().nodes.filter((n) => n.id !== id),
       edges: get().edges.filter((e) => e.source !== id && e.target !== id),
@@ -124,6 +251,7 @@ export const useCanvas = create<CanvasState>((set, get) => ({
     });
   },
   setFailure: (nodeId, atSec) => {
+    get().checkpoint();
     const rest = get().failures.filter((f) => f.nodeId !== nodeId);
     set({ failures: atSec === null ? rest : [...rest, { nodeId, atSec }], graphVersion: get().graphVersion + 1 });
   },
@@ -141,6 +269,9 @@ export const useCanvas = create<CanvasState>((set, get) => ({
       error: null,
       layoutVersion: get().layoutVersion + 1,
       graphVersion: get().graphVersion + 1,
+      past: [],
+      future: [],
+      locked: [],
     });
   },
   loadGraph: (graph) =>
@@ -153,6 +284,9 @@ export const useCanvas = create<CanvasState>((set, get) => ({
       error: null,
       layoutVersion: get().layoutVersion + 1,
       graphVersion: get().graphVersion + 1,
+      past: [],
+      future: [],
+      locked: [],
     }),
   loadDocument: (doc) =>
     set({
@@ -164,6 +298,9 @@ export const useCanvas = create<CanvasState>((set, get) => ({
       selectedId: null,
       layoutVersion: get().layoutVersion + 1,
       graphVersion: get().graphVersion + 1,
+      past: [],
+      future: [],
+      locked: [],
     }),
 
   toGraph: () => ({
