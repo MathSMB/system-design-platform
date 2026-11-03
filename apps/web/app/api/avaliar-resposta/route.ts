@@ -1,5 +1,6 @@
 import { SENIORITY, createProvider, type AnswerInput, type Seniority } from "@sdp/ai";
 import { NextResponse } from "next/server";
+import { logActivity } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
       answer,
       spoken: !!b.spoken,
     });
+    await logActivity("answer");
     return NextResponse.json(evaluation);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });

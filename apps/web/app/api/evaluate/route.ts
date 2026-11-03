@@ -1,6 +1,7 @@
 import { createProvider, type EvaluationInput } from "@sdp/ai";
 import { validateGraph } from "@sdp/sim-engine";
 import { NextResponse } from "next/server";
+import { logActivity } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
       graph: body.graph,
       simulation: body.simulation,
     });
+    await logActivity("design");
     return NextResponse.json(evaluation);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });

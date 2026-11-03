@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/client";
 import { interviewRuns } from "@/lib/db/schema";
+import { getSession } from "@/lib/session";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const cut = (x: unknown, n: number) => (x == null ? null : String(x).slice(0, n));
@@ -24,7 +25,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!UUID.test(id)) return NextResponse.json({ error: "id inválido" }, { status: 400 });
   const b = await req.json();
   if (!b?.state || typeof b.title !== "string") return NextResponse.json({ error: "Envie title e state." }, { status: 400 });
+  const session = await getSession();
   const values = {
+    userId: session?.user.id ?? null,
+    profileId: session?.profile?.id ?? null,
     kind: b.kind === "treino" ? "treino" : "processo",
     stack: cut(b.stack, 40) ?? "java",
     level: cut(b.level, 20) ?? "pleno",

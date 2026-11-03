@@ -41,6 +41,9 @@ Prioridade citada pelo Matheus: Java Júnior e Sênior, Full stack Python e DevO
 
 - Renovar as pesquisas prontas (Java, Python e React, DevOps · Pleno) em mai/2027.
 - Treino avulso em Entrevista técnica para Full stack Python e DevOps (hoje só Java Pleno tem a página de blocos; as perguntas já existem no pacote `hiring`).
-- Habit tracker com contas de usuário (cada perfil com o seu); fazer análise e proposta antes de implementar.
+- Habit tracker, fases 1 e 2 prontas (nov/2026): contas com entrada de um clique, perfis, metas automáticas, ofensiva com failover e o rack. Proposta: https://claude.ai/artifact/JYRg1yEgxVYe1aREvvUEPo
+- Login de verdade com Google e GitHub (Auth.js), no lugar da entrada de um clique sem senha. Necessário antes de publicar o site.
+- Habit tracker, fase 3: lembretes por e-mail ou notificação no celular (depois do deploy), metas próprias de check manual (ex. "estudar 30 min de Kubernetes") e upgrades visuais do datacenter.
+- Plano de estudos com check de progresso: juntar as pesquisas (artefatos fixados, como a de Java Pleno e o plano de projetos) num plano que mostra o que falta aprender. Fazer análise com ideias antes de implementar.
 - Publicar o site na Vercel (Root Directory `apps/web`); a IA publicada precisa de `AI_PROVIDER=api`.
 - System Design, próximos casos: rate limiter, pagamentos, sharding, autoscaling e pool de conexões bloqueante.

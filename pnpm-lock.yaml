@@ -29,6 +29,9 @@ importers:
       '@sdp/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@sdp/habit':
+        specifier: workspace:*
+        version: link:../../packages/habit
       '@sdp/hiring':
         specifier: workspace:*
         version: link:../../packages/hiring
@@ -103,6 +106,15 @@ importers:
       '@types/node':
         specifier: 22.18.0
         version: 22.18.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@22.18.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
+
+  packages/habit:
+    devDependencies:
       typescript:
         specifier: 5.9.3
         version: 5.9.3

@@ -50,3 +50,8 @@ export function SaveBadge({ status }: { status: SaveStatus | null }) {
   }[status];
   return <p className={`text-[12px] ${status === "salvo" ? "text-ok" : status === "erro" ? "text-down" : "text-muted"}`}>{text} {status === "salvo" && <a href="/historico" className="underline">Ver histórico</a>}</p>;
 }
+
+/** Marca uma etapa ou um processo terminado para a meta diária. Sem conta, não faz nada. */
+export function countActivity(kind: "stage" | "process", ref: string) {
+  fetch("/api/atividade", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind, ref }) }).catch(() => {});
+}

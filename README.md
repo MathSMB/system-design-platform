@@ -43,7 +43,9 @@ ANTHROPIC_API_KEY=...
 
 ### Banco (Neon)
 
-O banco guarda os desenhos, o histórico das suas entrevistas (respostas, feedback de cada uma e feedback geral) e a pesquisa de mercado de cada vaga. Sem banco, tudo funciona, mas os desenhos ficam no navegador e o histórico fica desligado.
+O banco guarda os desenhos, o histórico das suas entrevistas (respostas, feedback de cada uma e feedback geral), a pesquisa de mercado de cada vaga e as contas com o hábito de cada perfil. Sem banco, tudo funciona, mas os desenhos ficam no navegador e o histórico, as contas e o hábito ficam desligados.
+
+Depois de atualizar o projeto (`git pull`), rode `pnpm install` e `pnpm --filter web db:push` de novo para criar as tabelas novas.
 
 1. Crie uma conta grátis em [neon.tech](https://neon.tech) e um projeto (região São Paulo, `sa-east-1`).
 2. No painel, em **Connect**, copie a connection string (começa com `postgresql://` e termina com `?sslmode=require`).
@@ -52,6 +54,16 @@ O banco guarda os desenhos, o histórico das suas entrevistas (respostas, feedba
 5. Reinicie o `pnpm dev`.
 
 Para usar um Postgres local em vez do Neon: `docker compose up -d` e `DATABASE_URL=postgres://sdp:sdp@localhost:5432/sdp`.
+
+### Hábito (`/habito`)
+
+Entre em `/conta` (um clique, sem senha; login com Google e GitHub está nas pendências) e crie um perfil: stack, senioridade e meta diária.
+
+- **Leve:** 1 resposta avaliada pela IA.
+- **Regular:** 3 respostas ou 1 etapa do processo seletivo.
+- **Intensa:** 1 processo seletivo inteiro ou 1 caso de system design avaliado.
+
+A meta é marcada sozinha. Cada dia cumprido sobe um servidor no rack, e o datacenter cresce com a ofensiva: Cluster (7 dias), Multi-AZ (30), Multi-região (66) e Edge global (100). São 2 failovers por semana. Sem failover, dá para recuperar o dia perdido fazendo a meta em dobro no dia seguinte. As regras ficam em `packages/habit`.
 
 ## Ver online (Vercel)
 

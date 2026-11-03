@@ -455,3 +455,24 @@ input[type="checkbox"] {
 @media (prefers-reduced-motion: reduce) {
   .slide-in { animation: none; }
 }
+
+/* hábito: LED piscando nos servidores no ar e o servidor de hoje/em risco pulsando */
+.rack-led {
+  animation: rack-led 1.4s steps(2, jump-none) infinite;
+}
+@keyframes rack-led {
+  50% {
+    opacity: 0.25;
+  }
+}
+.rack-blink {
+  animation: rack-blink 1.6s ease-in-out infinite;
+}
+@keyframes rack-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}

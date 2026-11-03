@@ -17,6 +17,7 @@
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/press-start-2p": "5.3.0",
     "@sdp/ai": "workspace:*",
+    "@sdp/habit": "workspace:*",
     "@sdp/hiring": "workspace:*",
     "@sdp/race-sim": "workspace:*",
     "@sdp/sim-engine": "workspace:*",

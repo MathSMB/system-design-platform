@@ -1,12 +1,14 @@
-import { desc } from "drizzle-orm";
+import { desc, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/client";
 import { interviewRuns } from "@/lib/db/schema";
+import { getSession } from "@/lib/session";
 
-/** Lista o histórico de entrevistas. Sem banco, responde db: false. */
+/** Lista o histórico: o da sua conta, ou o feito sem entrar. Sem banco, responde db: false. */
 export async function GET() {
   const db = getDb();
   if (!db) return NextResponse.json({ db: false, items: [] });
+  const session = await getSession();
   const items = await db
     .select({
       id: interviewRuns.id,
@@ -19,10 +21,12 @@ export async function GET() {
       levelShown: interviewRuns.levelShown,
       score: interviewRuns.score,
       feedback: interviewRuns.feedback,
+      profileId: interviewRuns.profileId,
       createdAt: interviewRuns.createdAt,
     })
     .from(interviewRuns)
+    .where(session ? eq(interviewRuns.userId, session.user.id) : isNull(interviewRuns.userId))
     .orderBy(desc(interviewRuns.createdAt))
     .limit(100);
-  return NextResponse.json({ db: true, items });
+  return NextResponse.json({ db: true, items, profiles: session?.profiles ?? [], signedIn: !!session });
 }
