@@ -3,7 +3,8 @@ import { ClaudeCodeProvider } from "./claude-code";
 import type { AiProvider } from "./types";
 
 export * from "./types";
-export { ClaudeCodeProvider, parseClaudeOutput } from "./claude-code";
+export { ClaudeCodeProvider, parseClaudeOutput, parseClaudeJson } from "./claude-code";
+export * from "./answer";
 export { AnthropicApiProvider } from "./anthropic-api";
 export { buildPrompt, normalizeEvaluation, EVALUATION_SCHEMA, SYSTEM_PROMPT, DIMENSIONS } from "./rubric";
 

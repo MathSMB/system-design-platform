@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Database, Network, type LucideIcon } from "lucide-react";
+import { Coffee, Database, Network, type LucideIcon } from "lucide-react";
 
 export interface Area {
   href: string;
@@ -10,7 +10,7 @@ export interface Area {
   tone: "accent" | "accent-2";
 }
 
-export const areaCards = (mode: "estudo" | "entrevista", counts: { sd: number; race: number }): Area[] => [
+export const areaCards = (mode: "estudo" | "entrevista", counts: { sd: number; race: number; java?: number }): Area[] => [
   {
     href: `/${mode}/system-design`,
     title: "System Design",
@@ -33,11 +33,23 @@ export const areaCards = (mode: "estudo" | "entrevista", counts: { sd: number; r
     Icon: Database,
     tone: "accent-2",
   },
+  ...(mode === "entrevista" && counts.java
+    ? [
+        {
+          href: "/entrevista/java",
+          title: "Java",
+          body: "Perguntas reais de entrevista Java, por nível. Responda falando, compare com a resposta de pleno e descubra seu nível.",
+          count: `Pleno · ${counts.java} perguntas`,
+          Icon: Coffee,
+          tone: "accent" as const,
+        },
+      ]
+    : []),
 ];
 
 export function AreaPicker({ areas }: { areas: Area[] }) {
   return (
-    <div className="mt-8 grid gap-4 md:grid-cols-2">
+    <div className={`mt-8 grid gap-4 ${areas.length > 2 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
       {areas.map(({ href, title, body, count, Icon, tone }) => (
         <Link
           key={href}

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESETS, simulate } from "@sdp/sim-engine";
 import { describe, expect, it } from "vitest";
-import { ClaudeCodeProvider, buildPrompt, normalizeEvaluation, parseClaudeOutput } from "./index";
+import { ClaudeCodeProvider, buildAnswerPrompt, buildPrompt, normalizeAnswer, normalizeEvaluation, parseClaudeOutput } from "./index";
 
 const sample = {
   overallScore: 12,
@@ -56,5 +56,35 @@ process.stdin.on("end", () => {
     const e = await new ClaudeCodeProvider({ bin: process.execPath, binArgs: [script] }).evaluate({ problem: "Encurtador", graph: PRESETS.singleServer!.graph });
     delete process.env.ANTHROPIC_API_KEY;
     expect(e.judges[0]!.name).toBe("A");
+  });
+
+  it("monta o prompt de resposta de entrevista e normaliza o nível", () => {
+    const p = buildAnswerPrompt({ stage: "Entrevista técnica · Java", target: "pleno", question: "O que é N+1?", expected: ["Causa: LAZY"], answer: "é quando...", spoken: true });
+    expect(p).toContain("transcrição automática");
+    expect(p).toContain("- Causa: LAZY");
+    const a = normalizeAnswer({ level: "mestre", score: 14, verdict: "ok", strengths: [], gaps: ["x"], covered: [], communication: "", betterAnswer: "" });
+    expect(a.level).toBe("júnior");
+    expect(a.score).toBe(10);
+  });
+
+  it("avalia resposta pelo Claude Code com o schema de resposta", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "fake-claude-"));
+    const script = join(dir, "fake-claude.mjs");
+    const out = { level: "pleno", score: 8, verdict: "boa", strengths: ["mecanismo"], gaps: [], covered: ["Causa: LAZY"], communication: "clara", betterAnswer: "..." };
+    writeFileSync(
+      script,
+      `let input = "";
+process.stdin.on("data", (d) => (input += d));
+process.stdin.on("end", () => {
+  const args = process.argv.slice(2);
+  const schema = args[args.indexOf("--json-schema") + 1] || "";
+  const ok = schema.includes("betterAnswer") && input.includes("Resposta do candidato");
+  process.stdout.write(JSON.stringify({ type: "result", is_error: !ok, result: ok ? "" : "args errados", structured_output: ${JSON.stringify(out)} }));
+});
+`,
+    );
+    const a = await new ClaudeCodeProvider({ bin: process.execPath, binArgs: [script] }).evaluateAnswer({ stage: "Técnica", target: "pleno", question: "N+1?", answer: "lazy em loop" });
+    expect(a.level).toBe("pleno");
+    expect(a.covered).toEqual(["Causa: LAZY"]);
   });
 });
