@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SessionFeedbackPanel, answersOf, levelOf } from "@/components/answer/AiConversation";
 import { AnswerFeedback, LEVEL_COLOR } from "@/components/answer/VoiceAnswer";
+import { SaveBadge, useSaveHistory } from "@/lib/history";
+import type { SessionFeedback } from "@sdp/ai";
 import { JAVA_PLENO_JOB, JavaQuestionView, type QuestionResult } from "./JavaQuestionView";
 
 const GUIDE_URL = "https://claude.ai/artifact/AczyWaw1NdYjhjTScY3qCn";
@@ -63,6 +65,15 @@ function SessionSummary({ questions, results, onRestart, full }: { questions: Ja
   }).filter((x) => x.n);
   const weak = byBlock.filter((x) => x.avg < 6);
   const blockTitle = questions[0] ? BLOCKS.find((b) => b.id === questions[0]!.block)?.title : "";
+  const [id] = useState(() => crypto.randomUUID());
+  const [general, setGeneral] = useState<SessionFeedback | undefined>();
+  const title = full ? "Treino · Java Pleno · entrevista técnica completa" : `Treino · Java Pleno · bloco ${blockTitle}`;
+  const saved = useSaveHistory(
+    rated.length
+      ? { id, kind: "treino", stack: "java", level: "pleno", title, outcome: `Média ${avg.toFixed(1)}/10 em ${rated.length} respostas`, levelShown: level, score: Math.round(avg * 10) / 10, state: { questions: questions.map((q) => q.id), results }, feedback: general }
+      : null,
+    [general],
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -74,9 +85,11 @@ function SessionSummary({ questions, results, onRestart, full }: { questions: Ja
         </div>
       </div>
 
+      <SaveBadge status={saved} />
       <SessionFeedbackPanel
+        onReady={setGeneral}
         input={{
-          title: full ? "Treino · Java Pleno · entrevista técnica completa" : `Treino · Java Pleno · bloco ${blockTitle}`,
+          title,
           target: "pleno",
           job: JAVA_PLENO_JOB,
           stages: [

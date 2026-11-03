@@ -51,7 +51,7 @@ export interface AnswerEvaluation {
   followUp: string;
 }
 
-export const ANSWER_SYSTEM_PROMPT = `Você é um entrevistador experiente de vagas de desenvolvimento Java no Brasil e avalia UMA resposta de candidato, em português do Brasil.
+export const ANSWER_SYSTEM_PROMPT = `Você é um entrevistador experiente de vagas de tecnologia no Brasil (desenvolvimento back-end, front-end, full stack e DevOps) e avalia UMA resposta de candidato, em português do Brasil.
 
 Regras:
 - Diga em que nível a resposta está: "abaixo de júnior", "júnior", "pleno" ou "sênior". Critérios:

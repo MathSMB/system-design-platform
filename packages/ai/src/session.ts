@@ -38,7 +38,7 @@ export interface SessionFeedback {
   studyPlan: string[];
 }
 
-export const SESSION_SYSTEM_PROMPT = `Você é um tech lead e recrutador experiente de vagas Java no Brasil. Recebe TODAS as respostas que um candidato deu numa sessão de entrevista, já avaliadas uma a uma, e escreve o feedback geral que uma empresa nunca dá, em português do Brasil.
+export const SESSION_SYSTEM_PROMPT = `Você é um tech lead e recrutador experiente de vagas de tecnologia no Brasil. Recebe TODAS as respostas que um candidato deu numa sessão de entrevista, já avaliadas uma a uma, e escreve o feedback geral que uma empresa nunca dá, em português do Brasil.
 
 Regras:
 - "level": o nível que ele demonstrou no conjunto ("abaixo de júnior", "júnior", "pleno", "sênior"), pesando mais as etapas técnicas.
