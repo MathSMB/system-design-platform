@@ -1,4 +1,5 @@
 import type { Graph, SimResult } from "@sdp/sim-engine";
+import type { AnswerEvaluation, AnswerInput } from "./answer";
 
 export interface EvaluationInput {
   /** Enunciado do problema (ex. "Projete um encurtador de URL"). */
@@ -38,4 +39,6 @@ export interface Evaluation {
 export interface AiProvider {
   readonly name: string;
   evaluate(input: EvaluationInput): Promise<Evaluation>;
+  /** Avalia uma resposta de entrevista (falada ou escrita) e diz o nível demonstrado. */
+  evaluateAnswer(input: AnswerInput): Promise<AnswerEvaluation>;
 }

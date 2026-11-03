@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="flex gap-5 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
             <Link href="/estudo" className="transition-colors hover:text-accent" data-tour="nav-estudo">Estudo</Link>
             <Link href="/entrevista" className="transition-colors hover:text-accent-2">Entrevista</Link>
+            <Link href="/processo-seletivo" className="transition-colors hover:text-accent">Processo seletivo</Link>
             <Link href="/canvas" className="transition-colors hover:text-accent">Canvas livre</Link>
             <Link href="/concorrencia" className="transition-colors hover:text-accent-2">Lab. concorrência</Link>
             <Link href="/glossario" className="transition-colors hover:text-accent">Glossário</Link>

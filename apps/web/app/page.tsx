@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { BookOpen, FlaskConical, GraduationCap, PenTool, UserRound } from "lucide-react";
+import { BookOpen, Briefcase, FlaskConical, GraduationCap, PenTool, UserRound } from "lucide-react";
+import { COMPANIES, JAVA_PLENO } from "@sdp/hiring";
 import { HeroFlow } from "@/components/home/HeroFlow";
 import { RACE_INTERVIEWS } from "@/lib/concurrency/interviews";
 import { RACE_LESSONS } from "@/lib/concurrency/lessons";
@@ -27,7 +28,16 @@ const MODES = [
     areas: [
       ["/entrevista/system-design", `System Design · ${CHALLENGES.length} problemas`],
       ["/entrevista/concorrencia", `Concorrência e dados · ${RACE_INTERVIEWS.length} bugs`],
+      ["/entrevista/java", `Java Pleno · ${JAVA_PLENO.length} perguntas`],
     ],
+  },
+  {
+    href: "/processo-seletivo",
+    title: "Processo seletivo",
+    Icon: Briefcase,
+    tone: "accent",
+    body: "Simulação completa de uma vaga de Dev Java Pleno: triagem, RH, teste técnico, entrevista técnica, gestor, proposta e admissão. Responda falando, seja eliminado ou contratado, e receba o feedback com o seu nível.",
+    areas: [["/processo-seletivo", `Do RH à contratação · ${COMPANIES.length} empresas`]],
   },
 ] as const;
 
@@ -47,7 +57,7 @@ export default function Home() {
         <HeroFlow />
       </div>
 
-      <div className="mt-10 grid gap-5 md:grid-cols-2">
+      <div className="mt-10 grid gap-5 md:grid-cols-3">
         {MODES.map(({ href, title, Icon, tone, body, areas }) => (
           <div
             key={href}

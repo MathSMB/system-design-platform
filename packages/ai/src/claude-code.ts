@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
 import type { AiProvider, Evaluation, EvaluationInput } from "./types";
 
@@ -23,32 +24,41 @@ export class ClaudeCodeProvider implements AiProvider {
   constructor(private opts: ClaudeCodeOptions = {}) {}
 
   async evaluate(input: EvaluationInput): Promise<Evaluation> {
+    return normalizeEvaluation(await this.json(SYSTEM_PROMPT, EVALUATION_SCHEMA, buildPrompt(input)));
+  }
+
+  async evaluateAnswer(input: AnswerInput): Promise<AnswerEvaluation> {
+    return normalizeAnswer(await this.json(ANSWER_SYSTEM_PROMPT, ANSWER_SCHEMA, buildAnswerPrompt(input)));
+  }
+
+  /** Roda `claude -p` com saída JSON validada pelo schema. */
+  private async json(system: string, schema: object, prompt: string): Promise<unknown> {
     const args = [
       ...(this.opts.binArgs ?? []),
       "-p",
       "--output-format",
       "json",
       "--json-schema",
-      JSON.stringify(EVALUATION_SCHEMA),
+      JSON.stringify(schema),
       "--system-prompt",
-      SYSTEM_PROMPT,
+      system,
       "--tools",
       "",
       "--no-session-persistence",
     ];
     if (this.opts.model) args.push("--model", this.opts.model);
 
-    const stdout = await run(
-      this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude",
-      args,
-      buildPrompt(input),
-      this.opts.timeoutMs ?? 180_000,
-    );
-    return parseClaudeOutput(stdout);
+    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, prompt, this.opts.timeoutMs ?? 180_000);
+    return parseClaudeJson(stdout);
   }
 }
 
 export function parseClaudeOutput(stdout: string): Evaluation {
+  return normalizeEvaluation(parseClaudeJson(stdout));
+}
+
+/** Lê o envelope JSON do `claude -p` e devolve o objeto estruturado. */
+export function parseClaudeJson(stdout: string): unknown {
   let envelope: Record<string, unknown>;
   try {
     envelope = JSON.parse(stdout);
@@ -58,8 +68,8 @@ export function parseClaudeOutput(stdout: string): Evaluation {
   if (envelope.is_error) {
     throw new Error(`Claude Code retornou erro: ${String(envelope.result ?? envelope.subtype ?? "desconhecido")}`);
   }
-  if (envelope.structured_output) return normalizeEvaluation(envelope.structured_output);
-  return normalizeEvaluation(extractJson(String(envelope.result ?? "")));
+  if (envelope.structured_output) return envelope.structured_output;
+  return extractJson(String(envelope.result ?? ""));
 }
 
 function run(bin: string, args: string[], stdin: string, timeoutMs: number): Promise<string> {
