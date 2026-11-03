@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
+import { SESSION_SCHEMA, SESSION_SYSTEM_PROMPT, buildSessionPrompt, normalizeSession, type SessionFeedback, type SessionInput } from "./session";
 import type { AiProvider, Evaluation, EvaluationInput } from "./types";
 
 /**
@@ -21,6 +22,10 @@ export class AnthropicApiProvider implements AiProvider {
 
   async evaluateAnswer(input: AnswerInput): Promise<AnswerEvaluation> {
     return normalizeAnswer(await this.json(ANSWER_SYSTEM_PROMPT, ANSWER_SCHEMA, buildAnswerPrompt(input)));
+  }
+
+  async evaluateSession(input: SessionInput): Promise<SessionFeedback> {
+    return normalizeSession(await this.json(SESSION_SYSTEM_PROMPT, SESSION_SCHEMA, buildSessionPrompt(input)));
   }
 
   private async json(system: string, schema: object, prompt: string): Promise<unknown> {

@@ -13,8 +13,9 @@ export default function JavaPleno() {
         Explique o mecanismo. <span className="text-accent-2 glow">Não a definição.</span>
       </h1>
       <p className="mt-3 max-w-2xl text-muted">
-        O entrevistador pergunta com contexto de trabalho. Responda falando (o navegador transcreve e a IA diz em que nível sua resposta ficou) ou só
-        escolha a alternativa mais próxima da sua: a de pleno, a de livro ou a errada comum. Depois vem o aprofundamento e o que ele queria ouvir.
+        O entrevistador pergunta com contexto de trabalho e você responde falando ou digitando, como numa conversa. A IA reage no papel do
+        entrevistador, faz uma pergunta de aprofundamento a partir do que você disse e, no fim, mostra o nível da resposta, os pontos fortes e fracos e
+        como você deveria ter falado para esta vaga.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
         <Link href="/entrevista/java/pleno/completa" className="btn-neon flex items-center gap-2 px-4 py-2 text-xs">
