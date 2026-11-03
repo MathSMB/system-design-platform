@@ -41,15 +41,17 @@ AI_PROVIDER=api
 ANTHROPIC_API_KEY=...
 ```
 
-### Banco (opcional)
+### Banco (Neon)
 
-Sem banco, os desenhos ficam salvos no navegador. Para usar Postgres:
+O banco guarda os desenhos, o histórico das suas entrevistas (respostas, feedback de cada uma e feedback geral) e a pesquisa de mercado de cada vaga. Sem banco, tudo funciona, mas os desenhos ficam no navegador e o histórico fica desligado.
 
-```bash
-docker compose up -d
-cp apps/web/.env.example apps/web/.env.local
-pnpm --filter web db:push
-```
+1. Crie uma conta grátis em [neon.tech](https://neon.tech) e um projeto (região São Paulo, `sa-east-1`).
+2. No painel, em **Connect**, copie a connection string (começa com `postgresql://` e termina com `?sslmode=require`).
+3. Crie `apps/web/.env.local` a partir de `apps/web/.env.example` e cole em `DATABASE_URL`.
+4. Crie as tabelas: `pnpm --filter web db:push`
+5. Reinicie o `pnpm dev`.
+
+Para usar um Postgres local em vez do Neon: `docker compose up -d` e `DATABASE_URL=postgres://sdp:sdp@localhost:5432/sdp`.
 
 ## Ver online (Vercel)
 

@@ -35,11 +35,18 @@ const MODES = [
     href: "/processo-seletivo",
     title: "Processo seletivo",
     Icon: Briefcase,
-    tone: "accent",
-    body: "Simulação completa de uma vaga de Dev Java Pleno: triagem, RH, teste técnico, entrevista técnica, gestor, proposta e admissão. Responda falando, seja eliminado ou contratado, e receba o feedback com o seu nível.",
+    tone: "bad",
+    body: "Escolha a área, a stack e a senioridade e passe por um processo inteiro: triagem, RH, teste técnico, entrevista técnica, gestor, proposta e admissão. Tudo em conversa com a IA, com feedback de cada resposta e um feedback geral no fim.",
     areas: [["/processo-seletivo", `Do RH à contratação · ${COMPANIES.length} empresas`]],
   },
 ] as const;
+
+/** Cor de cada card: ciano, magenta e laranja (o mesmo do foguinho do banco). */
+const TONE = {
+  accent: { hover: "hover:border-accent hover:shadow-[0_0_28px_rgba(34,228,255,0.3)]", text: "text-accent" },
+  "accent-2": { hover: "hover:border-accent-2 hover:shadow-[0_0_28px_rgba(255,60,172,0.3)]", text: "text-accent-2" },
+  bad: { hover: "hover:border-bad hover:shadow-[0_0_28px_rgba(255,154,60,0.35)]", text: "text-bad" },
+} as const;
 
 export default function Home() {
   return (
@@ -61,11 +68,11 @@ export default function Home() {
         {MODES.map(({ href, title, Icon, tone, body, areas }) => (
           <div
             key={href}
-            className={`panel group relative flex flex-col gap-4 p-7 transition-shadow ${tone === "accent" ? "hover:border-accent hover:shadow-[0_0_28px_rgba(34,228,255,0.3)]" : "hover:border-accent-2 hover:shadow-[0_0_28px_rgba(255,60,172,0.3)]"}`}
+            className={`panel group relative flex flex-col gap-4 p-7 transition-shadow ${TONE[tone].hover}`}
           >
             <Link href={href} className="absolute inset-0" aria-label={title} />
-            <Icon size={42} className={tone === "accent" ? "text-accent" : "text-accent-2"} style={{ filter: `drop-shadow(0 0 10px var(--${tone}))` }} />
-            <h2 className={`font-display text-lg leading-relaxed ${tone === "accent" ? "text-accent" : "text-accent-2"} glow`}>{title}</h2>
+            <Icon size={42} className={TONE[tone].text} style={{ filter: `drop-shadow(0 0 10px var(--${tone}))` }} />
+            <h2 className={`font-display text-lg leading-relaxed ${TONE[tone].text} glow`}>{title}</h2>
             <p className="text-sm leading-relaxed text-muted">{body}</p>
             <div className="relative mt-auto flex flex-col gap-1.5">
               {areas.map(([h, label]) => (

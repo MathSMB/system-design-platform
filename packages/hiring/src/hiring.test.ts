@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  TRACKS,
+  companyFor,
+  drawTrack,
+  getTrack,
+  AREAS,
+  STACKS,
+  isReady,
+  stacksOf,
   BLOCKS,
   MARKET,
   screenApplication,
@@ -128,5 +136,54 @@ describe("processo seletivo", () => {
       expect(c.band[0]).toBeGreaterThanOrEqual(5500);
       expect(c.band[1]).toBeLessThanOrEqual(c.city === "Belo Horizonte" ? 9500 : 12000);
     }
+  });
+  it("catálogo de vagas: toda área tem stack, ids únicos e só Java Pleno pronto", () => {
+    for (const a of AREAS) expect(stacksOf(a.id).length, a.id).toBeGreaterThan(0);
+    expect(new Set(STACKS.map((s) => s.id)).size).toBe(STACKS.length);
+    expect(isReady("java", "pleno")).toBe(true);
+    expect(isReady("java", "senior")).toBe(false);
+    expect(isReady("python", "pleno")).toBe(false);
+  });
+  it("vagas com pesquisa: conteúdo completo e coerente com o catálogo", () => {
+    for (const st of STACKS) for (const l of st.ready) expect(getTrack(st.id, l), `${st.id}:${l}`).toBeDefined();
+    for (const t of Object.values(TRACKS)) {
+      expect(isReady(t.stack, t.level), t.id).toBe(true);
+      const ids = new Set(t.questions.map((q) => q.id));
+      expect(ids.size, t.id).toBe(t.questions.length);
+      for (const b of t.blocks) expect(t.questions.some((q) => q.block === b.id), `${t.id}:${b.id}`).toBe(true);
+      for (const q of t.questions) {
+        expect(t.blocks.some((b) => b.id === q.block), q.id).toBe(true);
+        expect(q.checklist.length, q.id).toBeGreaterThan(1);
+        expect(q.reference.length, q.id).toBeGreaterThan(80);
+      }
+      for (const rv of t.reviews) for (const i of rv.issues) expect(rv.lines[i.line - 1]?.trim().length, `${rv.id}:${i.line}`).toBeGreaterThan(0);
+      for (const c of COMPANIES) {
+        const cc = companyFor(c, t);
+        expect(cc.band[0]).toBeLessThan(cc.band[1]);
+        expect(cc.jobAd.must.length).toBeGreaterThan(2);
+      }
+      expect(t.market.sources.length).toBeGreaterThan(1);
+      expect(t.takehome.defense.length).toBeGreaterThan(1);
+    }
+  });
+
+  it("sorteio da vaga: sem repetir, cobre os blocos principais e é determinístico", () => {
+    for (const t of Object.values(TRACKS)) {
+      const a = drawTrack(t, 42, 6);
+      expect(a).toHaveLength(6);
+      expect(new Set(a.map((q) => q.id)).size).toBe(6);
+      for (const b of t.blocks.filter((b) => b.weight === 3)) expect(a.some((q) => q.block === b.id), `${t.id}:${b.id}`).toBe(true);
+      expect(drawTrack(t, 42, 6).map((q) => q.id)).toEqual(a.map((q) => q.id));
+    }
+  });
+
+  it("triagem usa os requisitos da vaga escolhida", () => {
+    const t = getTrack("python-react", "pleno")!;
+    const c = companyFor(COMPANIES[2]!, t);
+    const ok = { years: 3, salary: c.band[0] + 500, available: true, techs: "Python, Django, React, TypeScript, PostgreSQL" };
+    expect(screenApplication(c, ok, t).knockout).toBeUndefined();
+    expect(screenApplication(c, { ...ok, techs: "Python, Django, Vue" }, t).knockout).toMatch(/React/);
+    const d = getTrack("aws-k8s", "pleno")!;
+    expect(screenApplication(companyFor(COMPANIES[0]!, d), { ...ok, techs: "AWS, Terraform, Docker" }, d).knockout).toMatch(/Kubernetes/);
   });
 });

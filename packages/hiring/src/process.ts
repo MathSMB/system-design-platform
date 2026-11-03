@@ -199,12 +199,16 @@ export interface Screening {
 }
 
 /** Filtro automático da vaga: as regras que um ATS aplica antes de alguém ler o currículo. */
-export function screenApplication(c: Company, a: Application): Screening {
+export function screenApplication(
+  c: Company,
+  a: Application,
+  t: { experience: string; required: { pattern: string; label: string }[] } = { experience: "Java", required: [{ pattern: "spring", label: "Spring Boot" }] },
+): Screening {
   const [lo, hi] = c.band;
   const notes: Screening["notes"] = [];
   let knockout: string | undefined;
-  const t = a.techs.toLowerCase();
-  if (a.years < 2) knockout = "A vaga pede pleno (2 a 5 anos com Java). Com menos de 2 anos, o filtro corta automaticamente.";
+  const typed = a.techs.toLowerCase();
+  if (a.years < 2) knockout = `A vaga pede pleno (2 a 5 anos com ${t.experience}). Com menos de 2 anos, o filtro corta automaticamente.`;
   else if (a.years > 8) notes.push({ text: "Perfil acima da vaga: o recrutador vai perguntar por que um sênior quer uma vaga de pleno.", bad: true });
   else notes.push({ text: "Experiência dentro do que a vaga pede.", bad: false });
   if (!knockout && a.salary > hi * 1.3) knockout = `Pretensão de R$ ${a.salary.toLocaleString("pt-BR")} bem acima do teto da vaga: o filtro corta antes de alguém ler o currículo.`;
@@ -212,8 +216,9 @@ export function screenApplication(c: Company, a: Application): Screening {
   if (askedLow) notes.push({ text: "Pretensão abaixo da faixa: a proposta vai partir daqui e você deixa dinheiro na mesa.", bad: true });
   else if (a.salary <= hi * 1.3) notes.push({ text: a.salary > hi ? "Pretensão acima do teto, mas ainda negociável." : "Pretensão dentro da faixa.", bad: a.salary > hi });
   if (!knockout && !a.available) knockout = `Indisponível no modelo da vaga (${c.model}): eliminado no filtro.`;
-  if (!knockout && !/spring/.test(t)) knockout = "Spring Boot é obrigatório nesta vaga e não apareceu nas suas tecnologias. O filtro elimina.";
-  const hits = c.jobAd.must.filter((m) => m.toLowerCase().split(/[^a-zà-ú0-9]+/).some((w) => w.length > 2 && !["e", "com", "ou"].includes(w) && t.includes(w)));
+  const missing = t.required.find((r) => !new RegExp(r.pattern).test(typed));
+  if (!knockout && missing) knockout = `${missing.label} é obrigatório nesta vaga e não apareceu nas suas tecnologias. O filtro elimina.`;
+  const hits = c.jobAd.must.filter((m) => m.toLowerCase().split(/[^a-zà-ú0-9]+/).some((w) => w.length > 2 && !["e", "com", "ou"].includes(w) && typed.includes(w)));
   if (!knockout) notes.push({ text: `Bateu ${hits.length} de ${c.jobAd.must.length} requisitos obrigatórios nas tecnologias.`, bad: hits.length < c.jobAd.must.length / 2 });
   return { knockout, notes, askedLow };
 }
@@ -226,12 +231,12 @@ export interface NotedStep {
   options: (Option & { note: string })[];
 }
 
-export function rhQuestions(c: Company): NotedStep[] {
+export function rhQuestions(c: Company, experience = "Java/Spring"): NotedStep[] {
   return [
     {
       q: "Para começar, me conta um pouco sobre você e sua trajetória.",
       options: [
-        { ...G("Resumo de 1 a 2 minutos: quantos anos com Java/Spring, o domínio em que trabalho, uma entrega com número (\"reduzi o tempo da conciliação de 4 h para 20 min\") e por que esta vaga.", "Objetivo, com resultado concreto e ligado à vaga."), note: "Comunicação clara, resultado mensurável." },
+        { ...G(`Resumo de 1 a 2 minutos: quantos anos com ${experience}, o domínio em que trabalho, uma entrega com número ("reduzi o tempo da conciliação de 4 h para 20 min") e por que esta vaga.`, "Objetivo, com resultado concreto e ligado à vaga."), note: "Comunicação clara, resultado mensurável." },
         { ...M("Conto desde a faculdade, passando por cada emprego.", "Informação certa, mas longa demais: o recrutador perde o fio."), note: "Resposta longa, pouco foco." },
         { ...B("Está tudo no meu currículo.", "Soa desinteressado: esta pergunta é para ver como você se comunica."), note: "Pouco engajamento." },
       ],
@@ -314,14 +319,14 @@ export interface CodeReview {
   context: string;
   lines: string[];
   /** Linha (base 1) → problema plantado. */
-  issues: { line: number; kind: IssueKind; why: string }[];
+  issues: { line: number; kind: string; why: string }[];
 }
 
 export const REVIEWS: Record<"transferencia" | "relatorio", CodeReview> = {
   transferencia: {
     id: "transferencia",
     title: "PR #482 · Transferência entre contas",
-    context: "Um dev do time abriu este PR. Revise: clique nas linhas com problema e diga qual é. Linhas sem problema não precisam de comentário.",
+    context: "Um dev do time abriu este PR com a transferência entre contas.",
     lines: [
       "@RestController",
       "@RequestMapping(\"/transferencias\")",
@@ -364,7 +369,7 @@ export const REVIEWS: Record<"transferencia" | "relatorio", CodeReview> = {
   relatorio: {
     id: "relatorio",
     title: "PR #91 · Relatório de agendamentos por profissional",
-    context: "Revise este PR do time do cliente. Clique nas linhas com problema e diga qual é.",
+    context: "Um dev do cliente abriu este PR com o relatório.",
     lines: [
       "@GetMapping(\"/relatorios/profissionais\")",
       "List<ProfissionalDTO> relatorio(@RequestParam String inicio) {",
@@ -396,7 +401,7 @@ export const REVIEWS: Record<"transferencia" | "relatorio", CodeReview> = {
 };
 
 /** Nota da revisão: acerto de linha e tipo = 1; linha certa e tipo errado = 0,5; linha sem problema marcada = −0,5. */
-export function scoreReview(review: CodeReview, marks: Record<number, IssueKind>): { score: number; max: number } {
+export function scoreReview(review: CodeReview, marks: Record<number, string>): { score: number; max: number } {
   let score = 0;
   for (const [lineStr, kind] of Object.entries(marks)) {
     const issue = review.issues.find((i) => i.line === Number(lineStr));
