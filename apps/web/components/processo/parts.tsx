@@ -1,168 +1,102 @@
 "use client";
 
-import type { AnswerEvaluation } from "@sdp/ai";
-import { ISSUE_KINDS, scoreReview, type AskStep, type CodeReview, type IssueKind, type Option } from "@sdp/hiring";
-import { useMemo, useState } from "react";
-import { Bubble, Choices, Verdict, stableShuffle } from "@/components/answer/Chat";
-import { VoiceAnswer } from "@/components/answer/VoiceAnswer";
+import type { AskStep, CodeReview } from "@sdp/hiring";
+import { useState } from "react";
+import { AiConversation, type ConvContext, type ConvResult } from "@/components/answer/AiConversation";
+import { Bubble } from "@/components/answer/Chat";
 
-export interface Picked {
+/** Uma pergunta da etapa, com o que a IA precisa para avaliar. */
+export interface ConvItem {
   q: string;
-  option: Option & { note?: string };
-  options: Option[];
+  code?: string;
+  /** Dica mostrada antes de responder (ex. formato STAR). */
+  hint?: string;
+  reference?: string;
+  expected?: string[];
+  avoid?: string[];
+  maxFollowUps?: number;
+}
+
+/** Converte uma pergunta com alternativas em contexto para a IA: a melhor vira referência, as outras viram sinais de alerta. */
+export function fromStep(step: AskStep & { star?: string }): ConvItem {
+  const best = step.options.find((o) => o.level === "pleno");
+  return {
+    q: step.q,
+    hint: step.star ? `Monte no formato STAR · ${step.star}` : undefined,
+    reference: best ? `${best.text} (${best.why})` : undefined,
+    avoid: step.options.filter((o) => o.level !== "pleno").map((o) => `${o.text} (${o.why})`),
+  };
+}
+
+/** Revisão de código como conversa: você escreve os comentários do pull request e a IA confere com os problemas do código. */
+export function fromReview(review: CodeReview): ConvItem {
+  return {
+    q: `${review.context} Faça a revisão como faria num pull request: diga a linha, o problema e como corrigir. Comece pelo que é mais grave.`,
+    code: `// ${review.title}\n` + review.lines.map((l, k) => `${String(k + 1).padStart(2)}  ${l}`).join("\n"),
+    expected: review.issues.map((i) => `Linha ${i.line} (${i.kind}): ${i.why}`),
+    maxFollowUps: 1,
+  };
 }
 
 /**
- * Sequência de perguntas em formato de conversa. A cada pergunta você pode
- * responder falando (com avaliação da IA) e depois escolhe a alternativa mais próxima.
- * `instant`: mostra o comentário logo após cada resposta (senão, só no fim da etapa).
+ * Sequência de perguntas em conversa com a IA. Mostra o que já foi conversado e
+ * a pergunta atual; o feedback de cada resposta fica para o fim da etapa.
  */
-export function AskSequence({
-  steps,
+export function ConvSequence({
+  items,
   who,
-  stage,
+  ctx,
   hint,
-  instant,
-  voice = true,
-  onAi,
+  showFeedback,
   onFinish,
 }: {
-  steps: (AskStep & { star?: string })[];
+  items: ConvItem[];
   who: string;
-  stage: string;
+  ctx: Omit<ConvContext, "reference" | "expected" | "avoid">;
   hint?: string;
-  instant?: boolean;
-  voice?: boolean;
-  onAi?(q: string, e: AnswerEvaluation): void;
-  onFinish(picked: Picked[]): void;
+  showFeedback?: boolean;
+  onFinish(results: ConvResult[]): void;
 }) {
-  const [picked, setPicked] = useState<Picked[]>([]);
-  const i = picked.length;
-  const step = steps[i];
-  const opts = useMemo(() => (step ? stableShuffle(step.options, step.q) : []), [step]);
+  const [done, setDone] = useState<ConvResult[]>([]);
+  const i = done.length;
+  const item = items[i];
 
   return (
     <div className="flex flex-col gap-3">
       {hint && <p className="text-[12px] text-muted">{hint}</p>}
-      {picked.map((p) => (
-        <div key={p.q} className="flex flex-col gap-2">
-          <Bubble who={who}>{p.q}</Bubble>
-          <Bubble me>{p.option.text}</Bubble>
-          {instant && <Verdict picked={p.option} options={p.options} />}
+      {done.map((r) => (
+        <div key={r.question} className="flex flex-col gap-2 opacity-70">
+          {r.transcript.map((t, k) => (
+            <Bubble key={k} me={t.who === "candidato"} who={t.who === "entrevistador" ? who : undefined}>
+              {t.text}
+            </Bubble>
+          ))}
         </div>
       ))}
-      {step && (
+      {item && (
         <>
-          <Bubble who={who}>{step.q}</Bubble>
-          {step.star && <p className="text-[12px] text-muted">Monte no formato STAR · {step.star}</p>}
-          {voice && (
-            <VoiceAnswer
-              key={step.q}
-              ctx={{ stage, target: "pleno", question: step.q, reference: step.options.find((o) => o.level === "pleno")?.text }}
-              onEvaluated={(e) => onAi?.(step.q, e)}
-            />
+          {items.length > 1 && (
+            <div className="font-mono text-[11px] text-muted">
+              Pergunta {i + 1} de {items.length}
+            </div>
           )}
-          <div className="text-[12px] text-muted">Escolha a resposta mais próxima da sua:</div>
-          <Choices
-            options={opts}
-            onPick={(o) => {
-              const next = [...picked, { q: step.q, option: o, options: step.options }];
-              setPicked(next);
-              if (next.length === steps.length) onFinish(next);
+          {item.hint && <p className="text-[12px] text-muted">{item.hint}</p>}
+          <AiConversation
+            key={item.q}
+            question={item.q}
+            code={item.code}
+            who={who}
+            ctx={{ ...ctx, reference: item.reference, expected: item.expected, avoid: item.avoid }}
+            maxFollowUps={item.maxFollowUps ?? 1}
+            showFeedback={showFeedback}
+            nextLabel={i === items.length - 1 ? "Encerrar a etapa ▶" : "Próxima pergunta ▶"}
+            onDone={(r) => {
+              const next = [...done, r];
+              setDone(next);
+              if (next.length === items.length) onFinish(next);
             }}
           />
         </>
-      )}
-    </div>
-  );
-}
-
-/** Revisão de código: clique na linha e diga o problema. */
-export function CodeReviewView({ review, onFinish }: { review: CodeReview; onFinish(score: number, max: number, marks: Record<number, IssueKind>): void }) {
-  const [marks, setMarks] = useState<Record<number, IssueKind>>({});
-  const [open, setOpen] = useState<number | null>(null);
-  const [sent, setSent] = useState(false);
-  const result = sent ? scoreReview(review, marks) : null;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Bubble who="Time técnico">{review.context}</Bubble>
-      <div className="panel overflow-x-auto p-0">
-        <div className="border-b border-border px-3 py-1.5 font-mono text-[11px] text-muted">{review.title}</div>
-        <div className="font-mono text-[12px] leading-6">
-          {review.lines.map((line, k) => {
-            const n = k + 1;
-            const mark = marks[n];
-            const issue = sent ? review.issues.find((x) => x.line === n) : undefined;
-            const state = !sent ? (mark ? "marked" : "") : issue ? (mark === issue.kind ? "hit" : mark ? "half" : "miss") : mark ? "false" : "";
-            const bg = { "": "", marked: "bg-accent-2/10", hit: "bg-ok/15", half: "bg-warn/15", miss: "bg-down/15", false: "bg-down/10" }[state];
-            return (
-              <div key={n}>
-                <button
-                  disabled={sent || !line.trim()}
-                  onClick={() => setOpen(open === n ? null : n)}
-                  className={`flex w-full gap-3 px-3 text-left hover:bg-accent/5 disabled:cursor-default ${bg}`}
-                >
-                  <span className="w-6 shrink-0 text-right text-muted">{n}</span>
-                  <span className="whitespace-pre">{line || " "}</span>
-                  {mark && <span className="ml-auto shrink-0 pl-3 text-[11px] text-accent-2">● {mark}</span>}
-                </button>
-                {open === n && !sent && (
-                  <div className="flex flex-wrap gap-1.5 bg-panel-2 px-3 py-2 font-sans">
-                    {ISSUE_KINDS.map((k2) => (
-                      <button
-                        key={k2}
-                        onClick={() => {
-                          setMarks({ ...marks, [n]: k2 });
-                          setOpen(null);
-                        }}
-                        className={`btn-ghost px-2 py-1 text-[11px] ${mark === k2 ? "border-accent-2 text-accent-2" : ""}`}
-                      >
-                        {k2}
-                      </button>
-                    ))}
-                    {mark && (
-                      <button
-                        onClick={() => {
-                          const { [n]: _, ...rest } = marks;
-                          setMarks(rest);
-                          setOpen(null);
-                        }}
-                        className="px-2 py-1 text-[11px] text-muted underline"
-                      >
-                        tirar comentário
-                      </button>
-                    )}
-                  </div>
-                )}
-                {issue && (
-                  <div className={`px-12 py-1 font-sans text-[12px] ${state === "hit" ? "text-ok" : state === "half" ? "text-warn" : "text-down"}`}>
-                    {state === "hit" ? "✓ " : state === "half" ? "± " : "✗ não marcada · "}
-                    {issue.kind}: {issue.why}
-                  </div>
-                )}
-                {sent && state === "false" && <div className="px-12 py-1 font-sans text-[12px] text-down">Esta linha não tinha problema (−0,5).</div>}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {!sent ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => setSent(true)} className="btn-neon px-3 py-1.5 text-xs">
-            Enviar revisão ({Object.keys(marks).length} comentários)
-          </button>
-          <span className="text-[12px] text-muted">Linha e tipo certos valem 1; linha certa com tipo errado, 0,5; linha sem problema marcada, −0,5.</span>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-mono text-sm">
-            {result!.score} de {result!.max} problemas
-          </span>
-          <button onClick={() => onFinish(result!.score, result!.max, marks)} className="btn-neon px-3 py-1.5 text-xs">
-            Seguir ▶
-          </button>
-        </div>
       )}
     </div>
   );

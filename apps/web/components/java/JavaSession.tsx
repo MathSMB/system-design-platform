@@ -1,15 +1,14 @@
 "use client";
 
-import { BLOCKS, POINTS, drawInterview, estimateLevel, getQuestion, type JavaQuestion } from "@sdp/hiring";
+import { BLOCKS, drawInterview, getQuestion, type JavaQuestion } from "@sdp/hiring";
 import { Dices, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { JavaQuestionView, type QuestionResult } from "./JavaQuestionView";
+import { SessionFeedbackPanel, answersOf, levelOf } from "@/components/answer/AiConversation";
+import { AnswerFeedback, LEVEL_COLOR } from "@/components/answer/VoiceAnswer";
+import { JAVA_PLENO_JOB, JavaQuestionView, type QuestionResult } from "./JavaQuestionView";
 
 const GUIDE_URL = "https://claude.ai/artifact/AczyWaw1NdYjhjTScY3qCn";
-
-/** Pontos de uma pergunta: resposta principal + aprofundamento (máximo 4). */
-export const pointsOf = (r: QuestionResult) => POINTS[r.main.level] + POINTS[r.follow.level];
 
 /** Sessão de perguntas: um bloco inteiro ou a entrevista completa sorteada. */
 export function JavaSession({ ids, full }: { ids?: string[]; full?: boolean }) {
@@ -29,7 +28,7 @@ export function JavaSession({ ids, full }: { ids?: string[]; full?: boolean }) {
     if (full) setQuestions(drawInterview(Math.floor(Math.random() * 1e9)));
   };
 
-  if (i >= questions.length) return <SessionSummary questions={questions} results={results} onRestart={restart} full={full} />;
+  if (i >= questions.length) return <SessionSummary key={results.length} questions={questions} results={results} onRestart={restart} full={full} />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -55,61 +54,72 @@ export function JavaSession({ ids, full }: { ids?: string[]; full?: boolean }) {
 }
 
 function SessionSummary({ questions, results, onRestart, full }: { questions: JavaQuestion[]; results: QuestionResult[]; onRestart(): void; full?: boolean }) {
-  const total = results.reduce((s, r) => s + pointsOf(r), 0);
-  const max = results.length * 4;
-  const est = estimateLevel(max ? total / max : 0);
-  const ai = results.filter((r) => r.ai);
+  const rated = results.filter((r) => !r.conv.skipped);
+  const avg = rated.length ? rated.reduce((s, r) => s + r.conv.score, 0) / rated.length : 0;
+  const level = levelOf(rated.map((r) => r.conv.level));
   const byBlock = BLOCKS.map((b) => {
-    const rs = results.filter((r) => getQuestion(r.id)!.block === b.id);
-    return { b, n: rs.length, pts: rs.reduce((s, r) => s + pointsOf(r), 0) };
+    const rs = rated.filter((r) => getQuestion(r.id)!.block === b.id);
+    return { b, n: rs.length, avg: rs.length ? rs.reduce((s, r) => s + r.conv.score, 0) / rs.length : 0 };
   }).filter((x) => x.n);
-  const weak = byBlock.filter((x) => x.pts / (x.n * 4) < 0.6);
+  const weak = byBlock.filter((x) => x.avg < 6);
+  const blockTitle = questions[0] ? BLOCKS.find((b) => b.id === questions[0]!.block)?.title : "";
 
   return (
     <div className="flex flex-col gap-5">
       <div className="panel pop-in flex flex-col items-center gap-2 p-5 text-center">
         <div className="hud-label">Nível que suas respostas mostraram</div>
-        <div className={`font-display text-lg uppercase glow ${est.level.startsWith("pleno") ? "text-ok" : est.level === "júnior" ? "text-warn" : "text-down"}`}>{est.level}</div>
+        <div className={`font-display text-lg uppercase glow ${LEVEL_COLOR[level] ?? ""}`}>{rated.length ? level : "sem avaliação"}</div>
         <div className="font-mono text-sm text-muted">
-          {total} de {max} pontos
+          média {avg.toFixed(1)}/10 · {rated.length} de {results.length} respostas avaliadas pela IA
         </div>
-        <p className="max-w-lg text-sm text-muted">{est.text}</p>
-        {ai.length > 0 && (
-          <p className="text-sm">
-            Na avaliação da IA ({ai.length} {ai.length === 1 ? "resposta" : "respostas"}):{" "}
-            {ai.map((r) => r.ai!.level).join(", ")}.
-          </p>
-        )}
       </div>
+
+      <SessionFeedbackPanel
+        input={{
+          title: full ? "Treino · Java Pleno · entrevista técnica completa" : `Treino · Java Pleno · bloco ${blockTitle}`,
+          target: "pleno",
+          job: JAVA_PLENO_JOB,
+          stages: [
+            {
+              stage: full ? "Entrevista técnica" : (blockTitle ?? "Bloco"),
+              items: rated.map((r) => ({ question: r.conv.question, answer: answersOf(r.conv), level: r.conv.level, score: r.conv.score, gaps: r.conv.evals.flatMap((e) => e.gaps).slice(0, 4) })),
+            },
+          ],
+        }}
+      />
 
       {byBlock.length > 1 && (
         <div className="panel flex flex-col gap-2 p-4">
           <div className="hud-label">Por bloco</div>
-          {byBlock.map(({ b, n, pts }) => (
-            <div key={b.id} className="grid grid-cols-[minmax(140px,220px)_1fr_4ch] items-center gap-3 text-sm">
+          {byBlock.map(({ b, avg: a }) => (
+            <div key={b.id} className="grid grid-cols-[minmax(140px,220px)_1fr_5ch] items-center gap-3 text-sm">
               <span>{b.title}</span>
               <span className="h-2 overflow-hidden rounded bg-border">
-                <span className={`block h-full ${pts / (n * 4) >= 0.6 ? "bg-ok" : "bg-down"}`} style={{ width: `${(pts / (n * 4)) * 100}%` }} />
+                <span className={`block h-full ${a >= 6 ? "bg-ok" : "bg-down"}`} style={{ width: `${a * 10}%` }} />
               </span>
-              <span className="font-mono text-xs text-muted">{pts}/{n * 4}</span>
+              <span className="font-mono text-xs text-muted">{a.toFixed(1)}</span>
             </div>
           ))}
         </div>
       )}
 
       <div className="flex flex-col gap-1.5">
-        <div className="hud-label">Perguntas</div>
-        {questions.map((q, k) => {
-          const r = results[k];
-          if (!r) return null;
-          const p = pointsOf(r);
-          return (
-            <div key={q.id} className="panel flex items-start justify-between gap-3 p-2.5 text-[13px]">
-              <span>{q.prompt}</span>
-              <span className={`shrink-0 font-mono text-xs ${p >= 3 ? "text-ok" : p >= 2 ? "text-warn" : "text-down"}`}>{p}/4</span>
+        <div className="hud-label">Perguntas · clique para rever o feedback</div>
+        {results.map((r) => (
+          <details key={r.id} className="panel p-2.5 text-[13px]">
+            <summary className="flex cursor-pointer items-start justify-between gap-3">
+              <span>{r.conv.question}</span>
+              <span className={`shrink-0 font-mono text-xs ${r.conv.skipped ? "text-muted" : r.conv.score >= 7 ? "text-ok" : r.conv.score >= 5 ? "text-warn" : "text-down"}`}>
+                {r.conv.skipped ? "pulada" : `${r.conv.score}/10 · ${r.conv.level}`}
+              </span>
+            </summary>
+            <div className="mt-2 flex flex-col gap-2">
+              {r.conv.evals.map((e, k) => (
+                <AnswerFeedback key={k} e={e} target="pleno" title={k === 0 ? "Resposta principal" : "Aprofundamento"} />
+              ))}
             </div>
-          );
-        })}
+          </details>
+        ))}
       </div>
 
       {weak.length > 0 && (

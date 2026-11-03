@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BLOCKS,
+  MARKET,
+  screenApplication,
   COMPANIES,
   JAVA_PLENO,
   REVIEWS,
@@ -108,5 +110,23 @@ describe("processo seletivo", () => {
     const r = cltVsPj(10000, 1000);
     expect(r.ratio).toBeGreaterThan(1.4);
     expect(r.ratio).toBeLessThan(1.6);
+  });
+  it("triagem com campos livres aplica os filtros da vaga", () => {
+    const c = COMPANIES[0]!;
+    const ok = { years: 3, salary: c.band[0] + 500, available: true, techs: "Java 17, Spring Boot, Kafka, PostgreSQL, JUnit, Docker" };
+    expect(screenApplication(c, ok).knockout).toBeUndefined();
+    expect(screenApplication(c, { ...ok, years: 1 }).knockout).toMatch(/2 a 5 anos/);
+    expect(screenApplication(c, { ...ok, salary: c.band[1] * 1.5 }).knockout).toMatch(/acima do teto/);
+    expect(screenApplication(c, { ...ok, available: false }).knockout).toBeDefined();
+    expect(screenApplication(c, { ...ok, techs: "Java, Hibernate" }).knockout).toMatch(/Spring/);
+    expect(screenApplication(c, { ...ok, salary: c.band[0] * 0.7 }).askedLow).toBe(true);
+  });
+
+  it("faixas das empresas seguem a pesquisa de mercado (BH até ~R$ 9 mil)", () => {
+    expect(MARKET.sources.length).toBeGreaterThan(1);
+    for (const c of COMPANIES) {
+      expect(c.band[0]).toBeGreaterThanOrEqual(5500);
+      expect(c.band[1]).toBeLessThanOrEqual(c.city === "Belo Horizonte" ? 9500 : 12000);
+    }
   });
 });

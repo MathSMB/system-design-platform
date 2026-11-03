@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PRESETS, simulate } from "@sdp/sim-engine";
 import { describe, expect, it } from "vitest";
-import { ClaudeCodeProvider, buildAnswerPrompt, buildPrompt, normalizeAnswer, normalizeEvaluation, parseClaudeOutput } from "./index";
+import { ClaudeCodeProvider, buildAnswerPrompt, buildPrompt, normalizeAnswer, buildSessionPrompt, normalizeSession, normalizeEvaluation, parseClaudeOutput } from "./index";
 
 const sample = {
   overallScore: 12,
@@ -61,6 +61,10 @@ process.stdin.on("end", () => {
   it("monta o prompt de resposta de entrevista e normaliza o nível", () => {
     const p = buildAnswerPrompt({ stage: "Entrevista técnica · Java", target: "pleno", question: "O que é N+1?", expected: ["Causa: LAZY"], answer: "é quando...", spoken: true });
     expect(p).toContain("transcrição automática");
+    expect(p).toContain("NÃO faça pergunta de aprofundamento");
+    const p2 = buildAnswerPrompt({ stage: "RH", target: "pleno", question: "Fale de você", answer: "x", allowFollowUp: true, history: [{ who: "entrevistador", text: "Oi" }] });
+    expect(p2).toContain("Entrevistador: Oi");
+    expect(p2).toContain("Pode fazer uma pergunta");
     expect(p).toContain("- Causa: LAZY");
     const a = normalizeAnswer({ level: "mestre", score: 14, verdict: "ok", strengths: [], gaps: ["x"], covered: [], communication: "", betterAnswer: "" });
     expect(a.level).toBe("júnior");
@@ -70,7 +74,7 @@ process.stdin.on("end", () => {
   it("avalia resposta pelo Claude Code com o schema de resposta", async () => {
     const dir = mkdtempSync(join(tmpdir(), "fake-claude-"));
     const script = join(dir, "fake-claude.mjs");
-    const out = { level: "pleno", score: 8, verdict: "boa", strengths: ["mecanismo"], gaps: [], covered: ["Causa: LAZY"], communication: "clara", betterAnswer: "..." };
+    const out = { level: "pleno", score: 8, verdict: "boa", strengths: ["mecanismo"], gaps: [], covered: ["Causa: LAZY"], communication: "clara", betterAnswer: "...", reply: "Boa.", followUp: "E com paginação?" };
     writeFileSync(
       script,
       `let input = "";
@@ -78,7 +82,7 @@ process.stdin.on("data", (d) => (input += d));
 process.stdin.on("end", () => {
   const args = process.argv.slice(2);
   const schema = args[args.indexOf("--json-schema") + 1] || "";
-  const ok = schema.includes("betterAnswer") && input.includes("Resposta do candidato");
+  const ok = schema.includes("betterAnswer") && input.includes("resposta do candidato");
   process.stdout.write(JSON.stringify({ type: "result", is_error: !ok, result: ok ? "" : "args errados", structured_output: ${JSON.stringify(out)} }));
 });
 `,
@@ -86,5 +90,23 @@ process.stdin.on("end", () => {
     const a = await new ClaudeCodeProvider({ bin: process.execPath, binArgs: [script] }).evaluateAnswer({ stage: "Técnica", target: "pleno", question: "N+1?", answer: "lazy em loop" });
     expect(a.level).toBe("pleno");
     expect(a.covered).toEqual(["Causa: LAZY"]);
+    expect(a.followUp).toBe("E com paginação?");
+  });
+
+  it("monta o feedback geral da sessão com as etapas e normaliza", () => {
+    const p = buildSessionPrompt({
+      title: "Processo seletivo · Tucano",
+      target: "pleno",
+      eliminatedAt: "Conversa com o RH",
+      stages: [{ stage: "RH", result: "52%", items: [{ question: "Fale de você", answer: "sou dev", level: "júnior", score: 4, gaps: ["sem resultado"] }] }],
+    });
+    expect(p).toContain("## Etapa: RH (52%)");
+    expect(p).toContain("eliminado em: Conversa com o RH");
+    expect(p).toContain("Faltou: sem resultado");
+    const f = normalizeSession({ level: "x", score: 12, byStage: [{ stage: "RH", level: "pleno", comment: "ok" }], studyPlan: ["JPA"] });
+    expect(f.level).toBe("júnior");
+    expect(f.score).toBe(10);
+    expect(f.byStage[0]!.level).toBe("pleno");
+    expect(f.howToSpeak).toEqual([]);
   });
 });

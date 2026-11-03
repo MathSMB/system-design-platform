@@ -1,43 +1,42 @@
 "use client";
 
-import type { AnswerEvaluation } from "@sdp/ai";
+import type { SessionFeedback } from "@sdp/ai";
 import {
   ADMISSAO,
   BEHAVIORAL,
   COMPANIES,
   DOWNLEVEL,
   GHOSTING,
+  MARKET,
   PASS,
-  POINTS,
   SOFT_WARMUP,
   STAGES,
   TAKEHOME,
   cltVsPj,
   counterOffer,
   drawInterview,
-  estimateLevel,
   getCompany,
   getQuestion,
   makeOffer,
   reviewFor,
   rhQuestions,
   rng,
-  triagemForm,
+  screenApplication,
   type Company,
   type CompanyId,
   type Offer,
-  type Option,
   type Regime,
   type StageId,
 } from "@sdp/hiring";
 import { Briefcase, Building2, CheckCircle2, CircleX, Flag, RotateCcw, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Bubble, Choices, Verdict } from "@/components/answer/Chat";
-import { JavaQuestionView, type QuestionResult } from "@/components/java/JavaQuestionView";
-import { pointsOf } from "@/components/java/JavaSession";
+import { AiConversation, SessionFeedbackPanel, answersOf, levelOf, type ConvResult } from "@/components/answer/AiConversation";
+import { Bubble } from "@/components/answer/Chat";
+import { AnswerFeedback, LEVEL_COLOR } from "@/components/answer/VoiceAnswer";
+import { javaCtx } from "@/components/java/JavaQuestionView";
 import { RACE_INTERVIEWS } from "@/lib/concurrency/interviews";
-import { AskSequence, CodeReviewView, type Picked } from "./parts";
+import { ConvSequence, fromReview, fromStep, type ConvItem } from "./parts";
 
 // ───────────────────────── Estado ─────────────────────────
 
@@ -47,21 +46,34 @@ interface Note {
   bad: boolean;
 }
 
+/** Uma conversa da etapa, guardada para o feedback do fim da etapa e o relatório. */
+interface StageConv {
+  stage: StageId;
+  title?: string;
+  r: ConvResult;
+  /** Evento do processo (ligação do RH, sumiço): aparece no feedback mas não entra na nota. */
+  unscored?: boolean;
+}
+
 interface Run {
-  v: 1;
+  v: 2;
   company: CompanyId;
   seed: number;
   stage: StageId | "fim";
   scores: Partial<Record<StageId, { score: number; max: number }>>;
   notes: Note[];
+  /** Primeira etapa em que você seria eliminado num processo real. */
   eliminated?: { stage: StageId; reason: string };
+  /** Todas as etapas em que você reprovou (no treino, você segue mesmo assim). */
+  failed: StageId[];
   declined?: boolean;
   askedLow: boolean;
   downgraded: boolean;
-  java: { id: string; pts: number }[];
-  ai: { stage: StageId; question: string; level: string }[];
+  java: { id: string; score: number }[];
+  convs: StageConv[];
   offer?: Offer;
   final?: { monthly: number; regime: Regime };
+  general?: SessionFeedback;
 }
 
 /** O que uma etapa devolve quando termina. */
@@ -69,16 +81,17 @@ interface StageDone {
   score: number;
   max: number;
   notes: Note[];
+  convs: StageConv[];
   /** Eliminado por um motivo que não é a nota (filtro, evento). */
   eliminated?: string;
   patch?: Partial<Run>;
 }
 
-const KEY = "processo-seletivo:v1";
+const KEY = "processo-seletivo:v2";
 const load = (): Run | null => {
   try {
     const r = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    return r?.v === 1 && getCompany(r.company) ? r : null;
+    return r?.v === 2 && getCompany(r.company) ? r : null;
   } catch {
     return null;
   }
@@ -89,17 +102,33 @@ const save = (r: Run | null) => {
     else localStorage.removeItem(KEY);
   } catch {}
 };
+const newRun = (company: CompanyId): Run => ({ v: 2, company, seed: Math.floor(Math.random() * 1e9), stage: "triagem", scores: {}, notes: [], failed: [], askedLow: false, downgraded: false, java: [], convs: [] });
 
 const brl = (n: number) => `R$ ${Math.round(n).toLocaleString("pt-BR")}`;
-const pts = (picked: Picked[]) => picked.reduce((s, p) => s + POINTS[p.option.level], 0);
-const notesOf = (stage: StageId, picked: Picked[]): Note[] =>
-  picked.filter((p) => p.option.note).map((p) => ({ stage, text: p.option.note!, bad: p.option.level !== "pleno" }));
+
+/** Nota da etapa: soma das notas da IA (0 a 10) das conversas avaliadas. */
+function scoreOf(convs: StageConv[]) {
+  const rated = convs.filter((c) => !c.unscored && !c.r.skipped);
+  return { score: Math.round(rated.reduce((s, c) => s + c.r.score, 0) * 10) / 10, max: rated.length * 10 };
+}
+
+/** Texto da vaga para a IA ligar o feedback à vaga. */
+const jobText = (c: Company) =>
+  `${c.jobAd.title} na ${c.name} (${c.kind}, ${c.city}, ${c.model}). ${c.jobAd.about} Requisitos: ${c.jobAd.must.join(", ")}. Diferenciais: ${c.jobAd.nice.join(", ")}. Faixa salarial CLT da vaga (o candidato não sabe): ${brl(c.band[0])} a ${brl(c.band[1])}.`;
 
 /** Eventos sorteados pela semente: a mesma corrida sempre tem os mesmos. */
 function eventsOf(seed: number) {
   const r = rng(seed ^ 0x5eed);
   return { downlevel: r() < 0.5, ghost: r() < 0.4, otherProfile: r() < 0.5 };
 }
+
+/** Só a referência e os sinais de alerta de uma pergunta com alternativas. */
+const aiRef = (step: Parameters<typeof fromStep>[0]) => {
+  const { reference, avoid } = fromStep(step);
+  return { reference, avoid };
+};
+
+const stageTitle = (s: StageId) => STAGES.find((x) => x.id === s)!.title;
 
 // ───────────────────────── Componente principal ─────────────────────────
 
@@ -117,10 +146,9 @@ export function HiringSim() {
   }, [run, loaded]);
 
   if (!loaded) return null;
-  if (!run) return <CompanyPicker onPick={(id) => setRun({ v: 1, company: id, seed: Math.floor(Math.random() * 1e9), stage: "triagem", scores: {}, notes: [], askedLow: false, downgraded: false, java: [], ai: [] })} />;
+  if (!run) return <CompanyPicker onPick={(id) => setRun(newRun(id))} />;
 
   const c = getCompany(run.company)!;
-  const addAi = (stage: StageId) => (question: string, e: AnswerEvaluation) => setRun((r) => r && { ...r, ai: [...r.ai, { stage, question, level: e.level }] });
 
   function finishStage(d: StageDone) {
     setPending(d);
@@ -130,17 +158,18 @@ export function HiringSim() {
   function advance() {
     if (!run || !pending || run.stage === "fim") return;
     const stage = run.stage;
-    const pass = PASS[stage];
-    const frac = pending.max ? pending.score / pending.max : 1;
-    const failed = pending.eliminated ?? (pass !== undefined && frac < pass ? `Nota abaixo do corte da etapa (${Math.round(frac * 100)}% de ${Math.round(pass * 100)}%).` : undefined);
+    const reason = failReason(stage, pending);
     const idx = STAGES.findIndex((s) => s.id === stage);
     const next: Run = {
       ...run,
       ...pending.patch,
       scores: pending.max ? { ...run.scores, [stage]: { score: pending.score, max: pending.max } } : run.scores,
       notes: [...run.notes, ...pending.notes],
-      eliminated: failed ? { stage, reason: failed } : run.eliminated,
-      stage: failed || pending.patch?.declined || idx === STAGES.length - 1 ? "fim" : STAGES[idx + 1]!.id,
+      convs: [...run.convs, ...pending.convs],
+      failed: reason ? [...run.failed, stage] : run.failed,
+      eliminated: run.eliminated ?? (reason ? { stage, reason } : undefined),
+      // modo treino: mesmo reprovando, segue para a próxima etapa
+      stage: pending.patch?.declined || idx === STAGES.length - 1 ? "fim" : STAGES[idx + 1]!.id,
     };
     setRun(next);
     setPending(null);
@@ -149,7 +178,7 @@ export function HiringSim() {
 
   const restart = (same: boolean) => {
     setPending(null);
-    setRun(same ? { v: 1, company: run.company, seed: Math.floor(Math.random() * 1e9), stage: "triagem", scores: {}, notes: [], askedLow: false, downgraded: false, java: [], ai: [] } : null);
+    setRun(same ? newRun(run.company) : null);
   };
 
   return (
@@ -163,28 +192,40 @@ export function HiringSim() {
         </button>
       </div>
       <Stepper run={run} />
+      {run.eliminated && run.stage !== "fim" && (
+        <p className="mt-3 text-[12px] text-warn">
+          Modo treino: num processo real você teria parado em {stageTitle(run.eliminated.stage)}. Você segue treinando as próximas etapas.
+        </p>
+      )}
 
       <div className="mt-6">
         {run.stage === "fim" ? (
-          <Report run={run} c={c} onRestart={() => restart(true)} onOther={() => restart(false)} />
+          <Report run={run} c={c} onGeneral={(general) => setRun((r) => r && { ...r, general })} onRestart={() => restart(true)} onOther={() => restart(false)} />
         ) : pending ? (
           <StageResult stage={run.stage} d={pending} onNext={advance} />
         ) : (
-          <StageView key={`${run.stage}-${run.seed}`} run={run} c={c} onAi={addAi(run.stage)} onDone={finishStage} />
+          <StageView key={`${run.stage}-${run.seed}`} run={run} c={c} onDone={finishStage} />
         )}
       </div>
     </div>
   );
 }
 
+/** Motivo de reprovação na etapa, ou undefined se passou. */
+function failReason(stage: StageId, d: StageDone): string | undefined {
+  if (d.eliminated) return d.eliminated;
+  const pass = PASS[stage];
+  if (pass === undefined || !d.max) return undefined;
+  const frac = d.score / d.max;
+  return frac < pass ? `Nota abaixo do corte da etapa (${Math.round(frac * 100)}% de ${Math.round(pass * 100)}%).` : undefined;
+}
+
 function Stepper({ run }: { run: Run }) {
-  const elim = run.eliminated ? STAGES.findIndex((s) => s.id === run.eliminated!.stage) : -1;
-  const at = elim >= 0 ? elim : run.stage === "fim" ? STAGES.length : STAGES.findIndex((s) => s.id === run.stage);
+  const at = run.stage === "fim" ? STAGES.length : STAGES.findIndex((s) => s.id === run.stage);
   return (
     <ol className="mt-4 grid grid-cols-7 gap-1">
       {STAGES.map((s, k) => {
-        const out = run.eliminated?.stage === s.id;
-        const state = out ? "out" : k < at ? "done" : k === at && run.stage !== "fim" ? "now" : "todo";
+        const state = run.failed.includes(s.id) ? "out" : k < at ? "done" : k === at ? "now" : "todo";
         return (
           <li key={s.id} className="flex flex-col items-center gap-1 text-center">
             <span
@@ -209,10 +250,13 @@ function CompanyPicker({ onPick }: { onPick(id: CompanyId): void }) {
       </h1>
       <p className="mt-3 max-w-2xl text-muted">
         Você se candidata a uma vaga de Dev Java Pleno e passa por todas as etapas de um processo real: triagem, RH, teste técnico, entrevista técnica,
-        gestor, proposta e admissão. Em cada uma pode ser eliminado, e no fim recebe o feedback que a empresa nunca dá, com o nível que você mostrou.
-        Responda falando quando quiser: o navegador transcreve e a IA avalia.
+        gestor, proposta e admissão. Cada etapa é uma conversa com a IA no papel de quem entrevista: você responde falando ou digitando, ela reage e
+        aprofunda. No fim de cada etapa vem o feedback de cada resposta e, no fim do processo, um feedback geral.
       </p>
-      <p className="mt-2 text-[12px] text-muted">Empresas fictícias, montadas a partir de relatos reais de processos (Glassdoor) e das vagas Java lidas no seu guia de estudo.</p>
+      <p className="mt-2 text-[12px] text-muted">
+        Modo treino: se reprovar numa etapa, você vê onde teria parado e segue para a próxima. Empresas fictícias, montadas a partir de relatos reais
+        de processos (Glassdoor) e das vagas Java do seu guia de estudo. Faixas salariais pesquisadas em {MARKET.updated}.
+      </p>
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         {COMPANIES.map((c) => (
           <button key={c.id} onClick={() => onPick(c.id)} className="panel group flex flex-col gap-2 p-5 text-left transition-shadow hover:border-accent-2 hover:shadow-[0_0_24px_rgba(255,60,172,0.3)]">
@@ -231,10 +275,9 @@ function CompanyPicker({ onPick }: { onPick(id: CompanyId): void }) {
 }
 
 function StageHeader({ c, stage }: { c: Company; stage: StageId }) {
-  const s = STAGES.find((x) => x.id === stage)!;
   return (
     <div className="mb-4">
-      <h2 className="font-display text-sm leading-relaxed text-accent glow">{s.title}</h2>
+      <h2 className="font-display text-sm leading-relaxed text-accent glow">{stageTitle(stage)}</h2>
       {stage !== "admissao" && (
         <div className="mt-1 flex items-center gap-1.5 text-[12px] text-muted">
           <UserRound size={12} /> {c.who[stage]}
@@ -244,16 +287,16 @@ function StageHeader({ c, stage }: { c: Company; stage: StageId }) {
   );
 }
 
-function StageView({ run, c, onAi, onDone }: { run: Run; c: Company; onAi(q: string, e: AnswerEvaluation): void; onDone(d: StageDone): void }) {
+function StageView({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDone): void }) {
   const stage = run.stage as StageId;
   return (
     <div>
       <StageHeader c={c} stage={stage} />
       {stage === "triagem" && <Triagem c={c} onDone={onDone} />}
-      {stage === "rh" && <Rh c={c} onAi={onAi} onDone={onDone} />}
-      {stage === "teste" && <Teste c={c} onAi={onAi} onDone={onDone} />}
-      {stage === "tecnica" && <Tecnica run={run} c={c} onAi={onAi} onDone={onDone} />}
-      {stage === "gestor" && <Gestor run={run} c={c} onAi={onAi} onDone={onDone} />}
+      {stage === "rh" && <Rh c={c} onDone={onDone} />}
+      {stage === "teste" && <Teste c={c} onDone={onDone} />}
+      {stage === "tecnica" && <Tecnica run={run} c={c} onDone={onDone} />}
+      {stage === "gestor" && <Gestor run={run} c={c} onDone={onDone} />}
       {stage === "proposta" && <Proposta run={run} c={c} onDone={onDone} />}
       {stage === "admissao" && <Admissao run={run} onDone={onDone} />}
     </div>
@@ -261,21 +304,22 @@ function StageView({ run, c, onAi, onDone }: { run: Run; c: Company; onAi(q: str
 }
 
 function StageResult({ stage, d, onNext }: { stage: StageId; d: StageDone; onNext(): void }) {
+  const reason = failReason(stage, d);
+  const failed = !!reason;
   const pass = PASS[stage];
-  const frac = d.max ? d.score / d.max : 1;
-  const failed = !!d.eliminated || (pass !== undefined && frac < pass);
-  const title = STAGES.find((s) => s.id === stage)!.title;
+  const last = stage === STAGES[STAGES.length - 1]!.id || !!d.patch?.declined;
   return (
     <div className="flex flex-col gap-3">
       <div className={`panel pop-in flex flex-col items-center gap-2 p-5 text-center ${failed ? "border-down" : "border-ok"}`}>
         {failed ? <CircleX size={30} className="text-down" /> : <CheckCircle2 size={30} className="text-ok" />}
-        <div className={`font-display text-[12px] glow ${failed ? "text-down" : "text-ok"}`}>{failed ? "Eliminado nesta etapa" : `${title}: aprovado`}</div>
+        <div className={`font-display text-[12px] glow ${failed ? "text-down" : "text-ok"}`}>{failed ? "Reprovado nesta etapa" : `${stageTitle(stage)}: aprovado`}</div>
         {d.max > 0 && (
           <div className="font-mono text-sm text-muted">
-            {d.score} de {d.max} pontos {pass !== undefined && `· corte ${Math.round(pass * 100)}%`}
+            nota {((d.score / d.max) * 10).toFixed(1)}/10 {pass !== undefined && `· corte ${(pass * 10).toFixed(0)}`}
           </div>
         )}
-        {d.eliminated && <p className="max-w-md text-sm">{d.eliminated}</p>}
+        {reason && <p className="max-w-md text-sm">{reason}</p>}
+        {failed && !last && <p className="max-w-md text-[12px] text-muted">Num processo real, você seria eliminado aqui. No treino, você segue para a próxima etapa.</p>}
       </div>
       {d.notes.length > 0 && (
         <div className="panel flex flex-col gap-1 p-3 text-[13px]">
@@ -288,21 +332,23 @@ function StageResult({ stage, d, onNext }: { stage: StageId; d: StageDone; onNex
           ))}
         </div>
       )}
+      {d.convs.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="hud-label">Feedback de cada resposta</div>
+          {d.convs.map((cv) => (
+            <div key={cv.r.question} className="flex flex-col gap-2">
+              <div className="text-[13px] font-semibold">{cv.title ?? cv.r.question}</div>
+              {cv.r.skipped && <p className="text-[12px] text-muted">Pulada sem avaliação.</p>}
+              {cv.r.evals.map((e, k) => (
+                <AnswerFeedback key={k} e={e} target="pleno" title={cv.r.evals.length > 1 ? (k === 0 ? "Resposta principal" : "Aprofundamento") : undefined} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       <button onClick={onNext} className="btn-neon self-start px-4 py-2 text-xs">
-        {failed ? "Ver o feedback completo ▶" : "Próxima etapa ▶"}
+        {last ? "Ver o relatório final ▶" : failed ? "Seguir treinando: próxima etapa ▶" : "Próxima etapa ▶"}
       </button>
-    </div>
-  );
-}
-
-/** Comentário de cada resposta, mostrado no fim de uma etapa em conversa. */
-function Review({ picked }: { picked: Picked[] }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="hud-label">Comentário de cada resposta</div>
-      {picked.map((p) => (
-        <Verdict key={p.q} picked={p.option} options={p.options} title={p.q.length > 60 ? p.q.slice(0, 57) + "…" : p.q} />
-      ))}
     </div>
   );
 }
@@ -310,20 +356,21 @@ function Review({ picked }: { picked: Picked[] }) {
 // ───────────────────────── Etapas ─────────────────────────
 
 function Triagem({ c, onDone }: { c: Company; onDone(d: StageDone): void }) {
-  const form = useMemo(() => triagemForm(c), [c]);
-  const [answers, setAnswers] = useState<Record<number, number>>({});
-  const ready = form.every((_, k) => answers[k] !== undefined);
+  const [years, setYears] = useState("");
+  const [salary, setSalary] = useState("");
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [techs, setTechs] = useState("");
+  const ready = years !== "" && Number(salary) > 0 && available !== null && techs.trim().length > 2;
 
   function submit() {
-    const chosen = form.map((f, k) => f.options[answers[k]!]!);
-    const ko = chosen.find((o) => o.knockout);
-    const notes: Note[] = chosen.filter((o) => o.note).map((o) => ({ stage: "triagem", text: o.note!, bad: true }));
+    const s = screenApplication(c, { years: Number(years), salary: Number(salary), available: !!available, techs });
     onDone({
       score: 0,
       max: 0,
-      notes,
-      eliminated: ko ? `Filtro automático da vaga: ${ko.why}` : undefined,
-      patch: { askedLow: chosen[1]?.level === "livro" },
+      convs: [],
+      notes: s.notes.map((n) => ({ stage: "triagem", ...n })),
+      eliminated: s.knockout ? `Filtro automático da vaga: ${s.knockout}` : undefined,
+      patch: { askedLow: s.askedLow },
     });
   }
 
@@ -345,18 +392,33 @@ function Triagem({ c, onDone }: { c: Company; onDone(d: StageDone): void }) {
           <b className="text-text">Oferecemos:</b> {c.jobAd.offer.join(" · ")}
         </div>
       </div>
-      <p className="text-[12px] text-muted">Formulário de candidatura. Algumas respostas eliminam automaticamente, antes de uma pessoa ler o currículo.</p>
-      {form.map((f, k) => (
-        <fieldset key={f.q} className="panel flex flex-col gap-1.5 p-3 text-[13px]">
-          <legend className="px-1 font-semibold">{f.q}</legend>
-          {f.options.map((o, j) => (
-            <label key={o.text} className="flex cursor-pointer items-center gap-2">
-              <input type="radio" name={`f${k}`} checked={answers[k] === j} onChange={() => setAnswers({ ...answers, [k]: j })} />
-              {o.text}
-            </label>
-          ))}
-        </fieldset>
-      ))}
+      <p className="text-[12px] text-muted">Formulário de candidatura. O sistema aplica filtros automáticos antes de uma pessoa ler o currículo.</p>
+      <div className="panel flex flex-col gap-3 p-4 text-[13px]">
+        <label className="flex flex-col gap-1">
+          <span className="font-semibold">Há quantos anos você trabalha com Java?</span>
+          <input type="number" min={0} max={40} value={years} onChange={(e) => setYears(e.target.value)} className="w-28" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="font-semibold">Pretensão salarial mensal (CLT, bruto)</span>
+          <span className="flex items-center gap-2">
+            R$ <input type="number" min={0} step={100} value={salary} onChange={(e) => setSalary(e.target.value)} className="w-36" />
+          </span>
+        </label>
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold">O trabalho é: {c.model}. Você tem disponibilidade?</span>
+          <div className="flex gap-2">
+            {[true, false].map((v) => (
+              <button key={String(v)} onClick={() => setAvailable(v)} className={`btn-ghost px-3 py-1 text-xs ${available === v ? "border-accent text-accent" : ""}`}>
+                {v ? "Sim" : "Não"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="font-semibold">Quais tecnologias você já usou em projeto real?</span>
+          <textarea rows={2} value={techs} onChange={(e) => setTechs(e.target.value)} placeholder="Ex.: Java 17, Spring Boot, JPA, PostgreSQL, Kafka, JUnit, Docker" />
+        </label>
+      </div>
       <button disabled={!ready} onClick={submit} className="btn-neon self-start px-4 py-2 text-xs disabled:opacity-40">
         Enviar candidatura
       </button>
@@ -364,55 +426,34 @@ function Triagem({ c, onDone }: { c: Company; onDone(d: StageDone): void }) {
   );
 }
 
-function Rh({ c, onAi, onDone }: { c: Company; onAi(q: string, e: AnswerEvaluation): void; onDone(d: StageDone): void }) {
-  const steps = useMemo(() => rhQuestions(c), [c]);
-  const [picked, setPicked] = useState<Picked[] | null>(null);
+/** Etapa feita só de perguntas em conversa. */
+function ConvStage({ stage, c, who, label, items, hint, onDone }: { stage: StageId; c: Company; who: string; label: string; items: ConvItem[]; hint?: string; onDone(d: StageDone): void }) {
   return (
-    <div className="flex flex-col gap-4">
-      <AskSequence
-        steps={steps}
-        who={c.who.rh}
-        stage="Conversa com o RH"
-        hint="Videochamada de 30 minutos. O recrutador anota tudo; o comentário de cada resposta aparece no fim."
-        onAi={onAi}
-        onFinish={setPicked}
-      />
-      {picked && (
-        <>
-          <Bubble who={c.who.rh}>Obrigada pela conversa! Vou passar seu perfil para o time técnico e te retorno nos próximos dias.</Bubble>
-          <Review picked={picked} />
-          <button
-            onClick={() => {
-              const low = picked.find((p) => p.q.startsWith("Qual sua pretensão"))?.option.level === "errada";
-              onDone({ score: pts(picked), max: picked.length * 2, notes: notesOf("rh", picked), patch: low ? { askedLow: true } : undefined });
-            }}
-            className="btn-neon self-start px-4 py-2 text-xs"
-          >
-            Ver resultado da etapa ▶
-          </button>
-        </>
-      )}
-    </div>
+    <ConvSequence
+      items={items}
+      who={who}
+      hint={hint}
+      ctx={{ stage: label, target: "pleno", job: jobText(c), interviewer: who }}
+      onFinish={(rs) => {
+        const convs = rs.map((r) => ({ stage, r }));
+        onDone({ ...scoreOf(convs), notes: [], convs });
+      }}
+    />
   );
 }
 
-function Teste({ c, onAi, onDone }: { c: Company; onAi(q: string, e: AnswerEvaluation): void; onDone(d: StageDone): void }) {
+function Rh({ c, onDone }: { c: Company; onDone(d: StageDone): void }) {
+  const items = useMemo(() => rhQuestions(c).map(fromStep), [c]);
+  return <ConvStage stage="rh" c={c} who={c.who.rh} label="Conversa com o RH" items={items} hint="Videochamada de 30 minutos. O recrutador anota tudo; o feedback de cada resposta aparece no fim da etapa." onDone={onDone} />;
+}
+
+function Teste({ c, onDone }: { c: Company; onDone(d: StageDone): void }) {
   const [delivered, setDelivered] = useState(false);
-  const [picked, setPicked] = useState<Picked[] | null>(null);
+  const review = useMemo(() => [fromReview(reviewFor(c))], [c]);
+  const defense = useMemo(() => TAKEHOME.defense.map(fromStep), []);
 
   if (c.testFormat === "revisao")
-    return (
-      <CodeReviewView
-        review={reviewFor(c)}
-        onFinish={(score, max) =>
-          onDone({
-            score,
-            max,
-            notes: [{ stage: "teste", text: score / max >= 0.6 ? "Boa revisão de código: achou os problemas que importam." : "Revisão de código deixou passar problemas sérios.", bad: score / max < 0.6 }],
-          })
-        }
-      />
-    );
+    return <ConvStage stage="teste" c={c} who={c.who.teste} label="Teste técnico · revisão de código" items={review} hint="Revisão ao vivo: leia o código e comente como num pull request. Pode citar os números das linhas." onDone={onDone} />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -435,160 +476,144 @@ function Teste({ c, onAi, onDone }: { c: Company; onAi(q: string, e: AnswerEvalu
           </button>
         </>
       ) : (
-        <>
-          <AskSequence steps={TAKEHOME.defense} who={c.who.tecnica} stage="Teste técnico · defesa do desafio" hint="O tech lead abriu seu repositório e quer entender as decisões." onAi={onAi} onFinish={setPicked} />
-          {picked && (
-            <>
-              <Review picked={picked} />
-              <button onClick={() => onDone({ score: pts(picked), max: picked.length * 2, notes: [] })} className="btn-neon self-start px-4 py-2 text-xs">
-                Ver resultado da etapa ▶
-              </button>
-            </>
-          )}
-        </>
+        <ConvStage stage="teste" c={c} who={c.who.tecnica} label="Teste técnico · defesa do desafio" items={defense} hint="O tech lead abriu seu repositório e quer entender as decisões." onDone={onDone} />
       )}
     </div>
   );
 }
 
-function Tecnica({ run, c, onAi, onDone }: { run: Run; c: Company; onAi(q: string, e: AnswerEvaluation): void; onDone(d: StageDone): void }) {
+function Tecnica({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDone): void }) {
   const questions = useMemo(() => drawInterview(run.seed, 6), [run.seed]);
-  const race = useMemo(() => RACE_INTERVIEWS[run.seed % RACE_INTERVIEWS.length]!, [run.seed]);
-  const raceSteps = useMemo(
-    () =>
-      [race.diagnose, race.fix].map((q, k) => ({
-        q: k === 0 ? `${race.report.replace(/^"|"$/g, "")} ${q.q}` : q.q,
-        options: q.choices.map((ch): Option => ({ text: ch.text, level: ch.correct ? "pleno" : "errada", why: ch.why })),
-      })),
-    [race],
-  );
-  const [warm, setWarm] = useState<Picked[] | null>(c.softWarmup ? null : []);
-  const [java, setJava] = useState<QuestionResult[]>([]);
-  const [racePicked, setRacePicked] = useState<Picked[] | null>(c.raceQuestion ? null : []);
-  const [downlevel, setDownlevel] = useState<Option | null>(null);
+  const items = useMemo(() => {
+    const warm = c.softWarmup ? SOFT_WARMUP.map(fromStep) : [];
+    const java = questions.map((q): ConvItem => {
+      const x = javaCtx(q, "", jobText(c));
+      return { q: q.prompt, code: q.code, expected: x.expected, reference: x.reference, avoid: x.avoid };
+    });
+    const race = RACE_INTERVIEWS[run.seed % RACE_INTERVIEWS.length]!;
+    const right = (rq: typeof race.diagnose) => rq.choices.filter((ch) => ch.correct).map((ch) => ch.text);
+    const raceItem: ConvItem[] = c.raceQuestion
+      ? [
+          {
+            q: `Para fechar, um bug de produção: ${race.report.replace(/^"|"$/g, "")} ${race.diagnose.q}`,
+            expected: [...right(race.diagnose).map((t) => `Diagnóstico: ${t}`), ...right(race.fix).map((t) => `Correção: ${t}`)],
+            avoid: [...race.diagnose.choices, ...race.fix.choices].filter((ch) => !ch.correct).map((ch) => `${ch.text} (${ch.why})`),
+            reference: `Pergunta de correção que o entrevistador pode fazer em seguida: ${race.fix.q}`,
+          },
+        ]
+      : [];
+    return { all: [...warm, ...java, ...raceItem], javaFrom: warm.length };
+  }, [c, questions, run.seed]);
+  const [convs, setConvs] = useState<StageConv[] | null>(null);
+  const [downlevel, setDownlevel] = useState<ConvResult | null>(null);
 
-  const javaDone = java.length === questions.length;
-  const allDone = warm && javaDone && racePicked;
-  const score = (warm ? pts(warm) : 0) + java.reduce((s, r) => s + pointsOf(r), 0) + (racePicked ? pts(racePicked) : 0);
-  const max = (warm?.length ?? 0) * 2 + questions.length * 4 + (racePicked?.length ?? 0) * 2;
-  const frac = max ? score / max : 0;
+  const sc = convs ? scoreOf(convs) : { score: 0, max: 0 };
+  const frac = sc.max ? sc.score / sc.max : 0;
   // relato real: com nota média, a empresa oferece júnior em vez de pleno
-  const offerJunior = allDone && frac >= 0.6 && frac < 0.75 && eventsOf(run.seed).downlevel;
+  const offerJunior = !!convs && frac >= 0.6 && frac < 0.75 && eventsOf(run.seed).downlevel;
 
-  function finish(dl?: Option) {
-    const notes: Note[] = [{ stage: "tecnica", text: estimateLevel(frac).text, bad: frac < 0.6 }];
-    let eliminated: string | undefined;
+  function finish(all: StageConv[], dl?: ConvResult) {
+    const s = scoreOf(all);
+    const notes: Note[] = [];
     let downgraded = false;
+    const extra: StageConv[] = [];
     if (dl) {
-      notes.push({ stage: "tecnica", text: dl.level === "pleno" ? "Pediu feedback e negociou seguir como pleno com plano de revisão." : dl.level === "livro" ? "Aceitou a vaga de júnior sem negociar revisão." : "Recusou a vaga de júnior sem pedir feedback.", bad: dl.level !== "pleno" });
-      if (dl.level === "errada") eliminated = "Você recusou a proposta de seguir como júnior, e o processo foi encerrado.";
-      if (dl.level === "livro") downgraded = true;
+      const ok = !dl.skipped && dl.score >= 6;
+      notes.push({ stage: "tecnica", text: ok ? "Na ligação sobre júnior, pediu feedback e negociou seguir como pleno com plano de revisão." : "Na ligação sobre júnior, não negociou: segue como júnior.", bad: !ok });
+      downgraded = !ok;
+      extra.push({ stage: "tecnica", title: "Ligação do RH: oferta de júnior", r: dl, unscored: true });
     }
-    onDone({ score, max, notes, eliminated, patch: { java: java.map((r) => ({ id: r.id, pts: pointsOf(r) })), downgraded } });
+    const java = all.slice(items.javaFrom, items.javaFrom + questions.length).map((cv, k) => ({ id: questions[k]!.id, score: cv.r.skipped ? 0 : cv.r.score }));
+    onDone({ ...s, notes, convs: [...all, ...extra], patch: { java, downgraded } });
   }
 
+  if (!convs)
+    return (
+      <ConvSequence
+        items={items.all}
+        who={c.who.tecnica}
+        hint={c.softWarmup ? "Como no relato do banco digital: começa com soft skills, depois Java e Spring." : "Perguntas de Java e Spring com contexto de trabalho. Explique o mecanismo, não a definição."}
+        ctx={{ stage: "Entrevista técnica · Java Pleno", target: "pleno", job: jobText(c), interviewer: c.who.tecnica }}
+        onFinish={(rs) => {
+          const all = rs.map((r) => ({ stage: "tecnica" as const, r }));
+          const s = scoreOf(all);
+          const f = s.max ? s.score / s.max : 0;
+          if (f >= 0.6 && f < 0.75 && eventsOf(run.seed).downlevel) setConvs(all);
+          else finish(all);
+        }}
+      />
+    );
+
+  if (!offerJunior) return null;
   return (
-    <div className="flex flex-col gap-5">
-      {!warm && (
-        <AskSequence
-          steps={SOFT_WARMUP}
-          who={c.who.tecnica}
-          stage="Entrevista técnica · soft skills"
-          hint="Como no relato do banco digital: os primeiros 30 minutos são de soft skills."
-          instant
-          onAi={onAi}
-          onFinish={setWarm}
-        />
-      )}
-      {warm && !javaDone && (
-        <>
-          <div className="font-mono text-xs text-muted">
-            Pergunta técnica {java.length + 1} de {questions.length}
-          </div>
-          <JavaQuestionView key={questions[java.length]!.id} q={questions[java.length]!} who={c.who.tecnica} onDone={(r) => (setJava([...java, r]), window.scrollTo({ top: 0, behavior: "smooth" }))} />
-        </>
-      )}
-      {warm && javaDone && !racePicked && (
-        <AskSequence steps={raceSteps} who={c.who.tecnica} stage="Entrevista técnica · concorrência" hint="Para fechar, um bug de produção (o mesmo tipo da área Concorrência e dados)." instant voice={false} onFinish={setRacePicked} />
-      )}
-      {allDone && !offerJunior && (
-        <button onClick={() => finish()} className="btn-neon self-start px-4 py-2 text-xs">
-          Encerrar entrevista técnica ▶
-        </button>
-      )}
-      {offerJunior && (
-        <div className="flex flex-col gap-3">
-          <p className="text-[12px] text-muted">Dois dias depois, a recrutadora liga:</p>
-          <Bubble who={c.who.rh}>{DOWNLEVEL.q}</Bubble>
-          {!downlevel ? (
-            <Choices options={DOWNLEVEL.options} onPick={setDownlevel} />
-          ) : (
-            <>
-              <Bubble me>{downlevel.text}</Bubble>
-              <Verdict picked={downlevel} options={DOWNLEVEL.options} />
-              <button onClick={() => finish(downlevel)} className="btn-neon self-start px-4 py-2 text-xs">
-                Seguir ▶
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+    (
+      <div className="flex flex-col gap-3">
+        <p className="text-[12px] text-muted">Dois dias depois, a recrutadora liga:</p>
+        {!downlevel ? (
+          <AiConversation
+            question={DOWNLEVEL.q}
+            who={c.who.rh}
+            ctx={{ stage: "Ligação do RH depois da técnica", target: "pleno", job: jobText(c), interviewer: c.who.rh, ...aiRef(DOWNLEVEL) }}
+            maxFollowUps={0}
+            nextLabel="Encerrar a etapa ▶"
+            onDone={(r) => {
+              setDownlevel(r);
+              finish(convs, r);
+            }}
+          />
+        ) : null}
+      </div>
+    )
   );
 }
 
-function Gestor({ run, c, onAi, onDone }: { run: Run; c: Company; onAi(q: string, e: AnswerEvaluation): void; onDone(d: StageDone): void }) {
+function Gestor({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDone): void }) {
   const ev = eventsOf(run.seed);
-  const [ghost, setGhost] = useState<Option | null>(ev.ghost ? null : GHOSTING.options[0]!);
-  const [picked, setPicked] = useState<Picked[] | null>(null);
+  const [ghost, setGhost] = useState<ConvResult | null>(null);
+  const items = useMemo(() => BEHAVIORAL.map(fromStep), []);
+  const needGhost = ev.ghost && !ghost;
 
-  function finish() {
-    const score = pts(picked!);
-    const max = picked!.length * 2;
-    const frac = score / max;
-    const notes = notesOf("gestor", picked!);
-    if (ev.ghost) notes.push({ stage: "gestor", text: ghost!.level === "pleno" ? "Fez um follow-up educado quando o processo parou." : ghost!.level === "errada" ? "Cobrou o gestor direto no LinkedIn, passando por cima do RH." : "Esperou sem dar sinal quando o processo parou.", bad: ghost!.level !== "pleno" });
+  function finish(rs: ConvResult[]) {
+    const convs: StageConv[] = rs.map((r) => ({ stage: "gestor", r }));
+    const s = scoreOf(convs);
+    const frac = s.max ? s.score / s.max : 0;
+    const notes: Note[] = [];
+    if (ghost) {
+      convs.unshift({ stage: "gestor", title: "Uma semana sem resposta", r: ghost, unscored: true });
+      const ok = !ghost.skipped && ghost.score >= 6;
+      notes.push({ stage: "gestor", text: ok ? "Fez um follow-up adequado quando o processo parou." : "A reação ao processo parado não ajudou (esperar sem sinal ou cobrar fora do canal).", bad: !ok });
+    }
     // relato real: "o gestor preferiu seguir com outro perfil", mesmo com técnica boa
     const other = frac >= 0.6 && frac < 0.75 && ev.otherProfile;
     onDone({
-      score,
-      max,
+      ...s,
       notes,
+      convs,
       eliminated: other ? "\"O gestor preferiu seguir com outro perfil no momento.\" O motivo real: as respostas comportamentais ficaram genéricas, sem situação e resultado concretos, e outro candidato mostrou isso melhor." : undefined,
     });
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {!ghost && (
-        <div className="flex flex-col gap-3">
-          <Bubble who="Sistema">{GHOSTING.q}</Bubble>
-          <Choices options={GHOSTING.options} onPick={setGhost} />
-        </div>
-      )}
-      {ghost && ev.ghost && (
-        <>
-          <Bubble me>{ghost.text}</Bubble>
-          <Verdict picked={ghost} options={GHOSTING.options} />
-          <Bubble who={c.who.rh}>Oi! Desculpe a demora, estava fechando outras vagas. Agendei sua conversa com o gestor para amanhã.</Bubble>
-        </>
-      )}
-      {ghost && (
-        <AskSequence
-          steps={BEHAVIORAL}
-          who={c.who.gestor}
-          stage="Entrevista com o gestor (comportamental)"
-          hint="Conversa de 45 minutos sobre como você trabalha. Responda com casos reais no formato STAR."
-          onAi={onAi}
-          onFinish={setPicked}
+      {needGhost ? (
+        <AiConversation
+          question={GHOSTING.q}
+          who="Situação"
+          ctx={{ stage: "Processo parado depois da técnica", target: "pleno", job: jobText(c), interviewer: "narrador da simulação; responda como o candidato reagiria", ...aiRef(GHOSTING) }}
+          maxFollowUps={0}
+          nextLabel="Seguir ▶"
+          onDone={setGhost}
         />
-      )}
-      {picked && (
+      ) : (
         <>
-          <Review picked={picked} />
-          <button onClick={finish} className="btn-neon self-start px-4 py-2 text-xs">
-            Ver resultado da etapa ▶
-          </button>
+          {ghost && <Bubble who={c.who.rh}>Oi! Desculpe a demora, estava fechando outras vagas. Agendei sua conversa com o gestor para amanhã.</Bubble>}
+          <ConvSequence
+            items={items}
+            who={c.who.gestor}
+            hint="Conversa de 45 minutos sobre como você trabalha. Responda com casos reais no formato STAR."
+            ctx={{ stage: "Entrevista com o gestor (comportamental)", target: "pleno", job: jobText(c), interviewer: c.who.gestor }}
+            onFinish={finish}
+          />
         </>
       )}
     </div>
@@ -617,6 +642,7 @@ function Proposta({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDon
     onDone({
       score: 0,
       max: 0,
+      convs: [],
       notes: extra,
       patch: accepted ? { offer: { regime, monthly: current }, final: { monthly, regime } } : { offer: { regime, monthly: current }, declined: true },
     });
@@ -624,6 +650,9 @@ function Proposta({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDon
 
   return (
     <div className="flex flex-col gap-4">
+      {run.eliminated && (
+        <p className="text-[12px] text-warn">Num processo real você teria parado antes desta etapa. Aqui você treina a negociação mesmo assim, com uma proposta como se tivesse passado.</p>
+      )}
       <Bubble who={c.who.proposta}>
         Tenho uma ótima notícia: você foi aprovado{run.downgraded ? " para a vaga de júnior" : ""}! Segue a proposta. Fique à vontade para analisar com calma.
       </Bubble>
@@ -642,7 +671,20 @@ function Proposta({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDon
         <div className="text-muted">
           {regime === "CLT" ? `CLT · ${c.jobAd.offer.filter((x) => x !== "CLT" && x !== "CLT ou PJ").join(" · ")}` : "PJ · sem benefícios, nota fiscal mensal, 30 dias de aviso"}
         </div>
-        <div className="text-[12px] text-muted">Faixa da vaga (CLT): {brl(c.band[0])} a {brl(c.band[1])}. Referência de mercado em BH, Back-End Pleno: {brl(9950)} a {brl(16700)} (Robert Half).</div>
+        <div className="text-[12px] text-muted">Faixa da vaga (CLT): {brl(c.band[0])} a {brl(c.band[1])}.</div>
+        <details className="text-[12px] text-muted">
+          <summary className="cursor-pointer">Referência de mercado para Java Pleno ({MARKET.updated})</summary>
+          <ul className="mt-1 list-disc pl-4">
+            {MARKET.sources.map((s) => (
+              <li key={s.url}>
+                <a href={s.url} target="_blank" rel="noopener" className="text-accent underline">
+                  {s.label}
+                </a>
+                : {s.value}
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
 
       <div className="panel flex flex-col gap-1 p-3 text-[13px]">
@@ -692,7 +734,10 @@ function Proposta({ run, c, onDone }: { run: Run; c: Company; onDone(d: StageDon
       {mode === "resposta" && answer && (
         <>
           <Bubble me>Agradeço muito a proposta. Pela pesquisa de mercado e considerando o pacote, eu esperava {brl(asked)}. Conseguimos chegar nesse valor?</Bubble>
-          <Bubble who={c.who.proposta}>{answer.text}</Bubble>
+          {run.eliminated && (
+        <p className="text-[12px] text-warn">Num processo real você teria parado antes desta etapa. Aqui você treina a negociação mesmo assim, com uma proposta como se tivesse passado.</p>
+      )}
+      <Bubble who={c.who.proposta}>{answer.text}</Bubble>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() =>
@@ -734,7 +779,7 @@ function Admissao({ run, onDone }: { run: Run; onDone(d: StageDone): void }) {
       </div>
       <button
         disabled={done.size < items.length}
-        onClick={() => onDone({ score: 0, max: 0, notes: [] })}
+        onClick={() => onDone({ score: 0, max: 0, notes: [], convs: [] })}
         className="btn-neon self-start px-4 py-2 text-xs disabled:opacity-40"
       >
         Primeiro dia de trabalho ▶
@@ -743,59 +788,72 @@ function Admissao({ run, onDone }: { run: Run; onDone(d: StageDone): void }) {
   );
 }
 
+
 // ───────────────────────── Relatório final ─────────────────────────
 
-function Report({ run, c, onRestart, onOther }: { run: Run; c: Company; onRestart(): void; onOther(): void }) {
+function Report({ run, c, onGeneral, onRestart, onOther }: { run: Run; c: Company; onGeneral(f: SessionFeedback): void; onRestart(): void; onOther(): void }) {
   const hired = !!run.final && !run.eliminated;
-  const tec = run.scores.tecnica;
-  const level = tec ? estimateLevel(tec.score / tec.max) : null;
-  const overall = Object.values(run.scores).filter(Boolean);
-  const overallFrac = overall.length ? overall.reduce((s, x) => s + x!.score / x!.max, 0) / overall.length : 0;
-  const weakJava = run.java.filter((j) => j.pts < 3).map((j) => getQuestion(j.id)!);
-  const elimStage = run.eliminated ? STAGES.find((s) => s.id === run.eliminated!.stage)!.title : null;
+  const rated = run.convs.filter((x) => !x.unscored && !x.r.skipped);
+  const tech = rated.filter((x) => x.stage === "tecnica" || x.stage === "teste");
+  const level = levelOf((tech.length ? tech : rated).map((x) => x.r.level));
+  const overall = STAGES.filter((s) => run.scores[s.id]);
+  const weakJava = run.java.filter((j) => j.score < 6).map((j) => getQuestion(j.id)!);
+  const elimStage = run.eliminated ? stageTitle(run.eliminated.stage) : null;
+  const outcome = hired
+    ? `Contratado: ${run.final!.regime} ${brl(run.final!.monthly)}/mês${run.downgraded ? " (como júnior)" : ""}.`
+    : run.declined
+      ? "Recusou a proposta."
+      : elimStage
+        ? `Num processo real, seria eliminado em ${elimStage} (${run.eliminated!.reason}). Reprovou em: ${run.failed.map(stageTitle).join(", ")}.`
+        : "Processo concluído.";
 
   return (
     <div className="flex flex-col gap-5">
       <div className={`panel pop-in flex flex-col items-center gap-2 p-6 text-center ${hired ? "border-ok" : "border-down"}`}>
         <Flag size={30} className={hired ? "text-ok" : run.declined ? "text-warn" : "text-down"} />
         <div className={`font-display text-sm glow ${hired ? "text-ok" : run.declined ? "text-warn" : "text-down"}`}>
-          {hired ? "Contratado!" : run.declined ? "Você recusou a proposta" : `Eliminado em: ${elimStage}`}
+          {hired ? "Contratado!" : run.declined ? "Você recusou a proposta" : `Num processo real: eliminado em ${elimStage}`}
         </div>
-        {hired && run.final && (
+        {run.final && (
           <div className="font-mono text-sm">
-            {run.final.regime} · {brl(run.final.monthly)}/mês {run.downgraded ? "· vaga de júnior" : ""}
+            {run.final.regime} · {brl(run.final.monthly)}/mês {run.downgraded ? "· vaga de júnior" : ""} {run.eliminated ? "(no treino)" : ""}
           </div>
         )}
         {run.eliminated && <p className="max-w-lg text-sm text-muted">{run.eliminated.reason}</p>}
-      </div>
-
-      <div className="panel flex flex-col gap-2 p-4">
-        <div className="hud-label">Seu nível neste processo</div>
-        {level ? (
-          <>
-            <div className={`font-display text-[12px] uppercase glow ${level.level.startsWith("pleno") ? "text-ok" : level.level === "júnior" ? "text-warn" : "text-down"}`}>{level.level}</div>
-            <p className="text-sm text-muted">{level.text}</p>
-          </>
-        ) : (
-          <p className="text-sm text-muted">O processo parou antes da entrevista técnica, então não deu para medir o nível técnico.</p>
-        )}
-        {run.ai.length > 0 && (
-          <div className="mt-1 flex flex-col gap-1 text-[13px]">
-            <div className="hud-label !text-muted">Respostas faladas avaliadas pela IA</div>
-            {run.ai.map((a) => (
-              <div key={a.stage + a.question} className="flex justify-between gap-3">
-                <span className="text-muted">{a.question}</span>
-                <span className="shrink-0 font-semibold">{a.level}</span>
-              </div>
-            ))}
+        {run.failed.length > 0 && <p className="max-w-lg text-[12px] text-muted">Você seguiu treinando e passou por todas as etapas. Reprovou em: {run.failed.map(stageTitle).join(", ")}.</p>}
+        {rated.length > 0 && (
+          <div className="mt-1 text-sm">
+            Nível mostrado: <b className={LEVEL_COLOR[level]}>{level}</b>
           </div>
         )}
       </div>
+
+      <SessionFeedbackPanel
+        cached={run.general}
+        onReady={onGeneral}
+        input={{
+          title: `Processo seletivo completo · ${c.name} · Java Pleno`,
+          target: "pleno",
+          job: jobText(c),
+          outcome,
+          eliminatedAt: elimStage ?? undefined,
+          stages: STAGES.map((s) => {
+            const sc = run.scores[s.id];
+            return {
+              stage: s.title,
+              result: sc ? `${((sc.score / sc.max) * 10).toFixed(1)}/10${run.failed.includes(s.id) ? ", reprovado" : ""}` : run.failed.includes(s.id) ? "reprovado" : undefined,
+              items: run.convs
+                .filter((x) => x.stage === s.id && !x.r.skipped)
+                .map((x) => ({ question: x.title ? `${x.title}: ${x.r.question}` : x.r.question, answer: answersOf(x.r), level: x.r.level, score: x.r.score, gaps: x.r.evals.flatMap((e) => e.gaps).slice(0, 4) })),
+            };
+          }).filter((s) => s.items.length),
+        }}
+      />
 
       {overall.length > 0 && (
         <div className="panel flex flex-col gap-2 p-4">
           <div className="hud-label">Nota por etapa</div>
-          {STAGES.filter((s) => run.scores[s.id]).map((s) => {
+          {overall.map((s) => {
             const x = run.scores[s.id]!;
             const f = x.score / x.max;
             return (
@@ -804,22 +862,44 @@ function Report({ run, c, onRestart, onOther }: { run: Run; c: Company; onRestar
                 <span className="h-2 overflow-hidden rounded bg-border">
                   <span className={`block h-full ${f >= (PASS[s.id] ?? 0) ? "bg-ok" : "bg-down"}`} style={{ width: `${f * 100}%` }} />
                 </span>
-                <span className="font-mono text-xs text-muted">{Math.round(f * 100)}%</span>
+                <span className="font-mono text-xs text-muted">{(f * 10).toFixed(1)}</span>
               </div>
             );
           })}
-          <div className="text-[12px] text-muted">Média: {Math.round(overallFrac * 100)}%.</div>
         </div>
       )}
 
       {run.notes.length > 0 && (
         <div className="panel flex flex-col gap-1 p-4 text-[13px]">
-          <div className="hud-label">O feedback que a empresa não te daria</div>
+          <div className="hud-label">O que ficou anotado sobre você</div>
           {run.notes.map((n, k) => (
             <div key={k} className={n.bad ? "text-warn" : "text-ok"}>
               {n.bad ? "▲ " : "✓ "}
               <span className="text-muted">{STAGES.find((s) => s.id === n.stage)!.short}:</span> {n.text}
             </div>
+          ))}
+        </div>
+      )}
+
+      {run.convs.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <div className="hud-label">Todas as respostas · clique para rever o feedback</div>
+          {run.convs.map((x, k) => (
+            <details key={k} className="panel p-2.5 text-[13px]">
+              <summary className="flex cursor-pointer items-start justify-between gap-3">
+                <span>
+                  <span className="text-muted">{STAGES.find((s) => s.id === x.stage)!.short}:</span> {x.title ?? x.r.question}
+                </span>
+                <span className={`shrink-0 font-mono text-xs ${x.r.skipped ? "text-muted" : x.r.score >= 7 ? "text-ok" : x.r.score >= 5 ? "text-warn" : "text-down"}`}>
+                  {x.r.skipped ? "pulada" : `${x.r.score}/10`}
+                </span>
+              </summary>
+              <div className="mt-2 flex flex-col gap-2">
+                {x.r.evals.map((e, j) => (
+                  <AnswerFeedback key={j} e={e} target="pleno" />
+                ))}
+              </div>
+            </details>
           ))}
         </div>
       )}

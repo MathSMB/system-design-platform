@@ -41,7 +41,7 @@ export const COMPANIES: Company[] = [
     pattern: "Formato de banco digital: entrevista técnica com 3 devs começando por soft skills, fit cultural curto, cerca de 3 semanas.",
     city: "São Paulo",
     model: "Remoto, com encontros trimestrais",
-    band: [11000, 15500],
+    band: [8500, 11500],
     regimes: ["CLT"],
     testFormat: "revisao",
     who: { triagem: "Formulário da vaga (Gupy)", rh: "Larissa, tech recruiter", teste: "Revisão de código com o time", tecnica: "3 devs do time de Pagamentos (júnior, pleno e sênior)", gestor: "Diego, engineering manager", proposta: "Larissa, tech recruiter" },
@@ -63,7 +63,7 @@ export const COMPANIES: Company[] = [
     pattern: "Formato de consultoria: RH, gerente técnico e arquiteto em conversas separadas; vaga para alocação num cliente.",
     city: "Belo Horizonte",
     model: "Híbrido no cliente, 2 vezes por semana",
-    band: [9500, 13000],
+    band: [6000, 8500],
     regimes: ["CLT", "PJ"],
     testFormat: "revisao",
     who: { triagem: "Formulário da vaga (Gupy)", rh: "Patrícia, recrutadora", teste: "Revisão de código com o gerente técnico", tecnica: "Rafael, arquiteto de soluções", gestor: "Marcos, gerente técnico do cliente", proposta: "Patrícia, recrutadora" },
@@ -85,7 +85,7 @@ export const COMPANIES: Company[] = [
     pattern: "Formato de empresa de produto média: desafio para fazer em casa e conversa com o tech lead sobre as suas decisões.",
     city: "Belo Horizonte",
     model: "Híbrido, 2 vezes por semana na Savassi",
-    band: [9950, 13500],
+    band: [6500, 9000],
     regimes: ["CLT"],
     testFormat: "takehome",
     who: { triagem: "Formulário da vaga", rh: "Júlia, analista de pessoas", teste: "Desafio para fazer em casa (72 h)", tecnica: "Bruno, tech lead", gestor: "Ana, CTO", proposta: "Júlia, analista de pessoas" },
@@ -101,6 +101,20 @@ export const COMPANIES: Company[] = [
     },
   },
 ];
+
+/**
+ * Referência de mercado para Java Pleno (pesquisada em 03/11/2026). Mostrada na proposta.
+ * A faixa das empresas fictícias segue estes números: BH entre R$ 6 e 9 mil,
+ * banco digital remoto um pouco acima.
+ */
+export const MARKET = {
+  updated: "nov/2026",
+  sources: [
+    { label: "Glassdoor, Java Pleno em BH", value: "média R$ 7 mil, de R$ 4 a 9 mil (50 salários)", url: "https://www.glassdoor.com.br/Sal%C3%A1rios/belo-horizonte-mg-desenvolvedor-java-pleno-sal%C3%A1rio-SRCH_IL.0,17_IC2514646_KO18,42.htm" },
+    { label: "Indeed, Java Pleno no Brasil", value: "média R$ 6.452 (jul/2026); SP R$ 7.433", url: "https://br.indeed.com/career/desenvolvedor-java-pleno/salaries" },
+    { label: "Vagas anunciadas em BH (ProgramaThor)", value: "back-end pleno até R$ 8 mil; pleno/sênior até R$ 12 mil", url: "https://programathor.com.br/jobs-java/belo-horizonte" },
+  ],
+};
 
 export const getCompany = (id: string) => COMPANIES.find((c) => c.id === id);
 
@@ -164,6 +178,44 @@ export function triagemForm(c: Company): FormQuestion[] {
       ],
     },
   ];
+}
+
+/** Candidatura preenchida em campos livres, como num formulário da Gupy. */
+export interface Application {
+  years: number;
+  /** Pretensão mensal CLT em R$. */
+  salary: number;
+  /** Aceita o modelo de trabalho da vaga. */
+  available: boolean;
+  /** Tecnologias que já usou em projeto real, em texto livre. */
+  techs: string;
+}
+
+export interface Screening {
+  /** Motivo do corte automático, quando há. */
+  knockout?: string;
+  notes: { text: string; bad: boolean }[];
+  askedLow: boolean;
+}
+
+/** Filtro automático da vaga: as regras que um ATS aplica antes de alguém ler o currículo. */
+export function screenApplication(c: Company, a: Application): Screening {
+  const [lo, hi] = c.band;
+  const notes: Screening["notes"] = [];
+  let knockout: string | undefined;
+  const t = a.techs.toLowerCase();
+  if (a.years < 2) knockout = "A vaga pede pleno (2 a 5 anos com Java). Com menos de 2 anos, o filtro corta automaticamente.";
+  else if (a.years > 8) notes.push({ text: "Perfil acima da vaga: o recrutador vai perguntar por que um sênior quer uma vaga de pleno.", bad: true });
+  else notes.push({ text: "Experiência dentro do que a vaga pede.", bad: false });
+  if (!knockout && a.salary > hi * 1.3) knockout = `Pretensão de R$ ${a.salary.toLocaleString("pt-BR")} bem acima do teto da vaga: o filtro corta antes de alguém ler o currículo.`;
+  const askedLow = a.salary > 0 && a.salary < lo * 0.9;
+  if (askedLow) notes.push({ text: "Pretensão abaixo da faixa: a proposta vai partir daqui e você deixa dinheiro na mesa.", bad: true });
+  else if (a.salary <= hi * 1.3) notes.push({ text: a.salary > hi ? "Pretensão acima do teto, mas ainda negociável." : "Pretensão dentro da faixa.", bad: a.salary > hi });
+  if (!knockout && !a.available) knockout = `Indisponível no modelo da vaga (${c.model}): eliminado no filtro.`;
+  if (!knockout && !/spring/.test(t)) knockout = "Spring Boot é obrigatório nesta vaga e não apareceu nas suas tecnologias. O filtro elimina.";
+  const hits = c.jobAd.must.filter((m) => m.toLowerCase().split(/[^a-zà-ú0-9]+/).some((w) => w.length > 2 && !["e", "com", "ou"].includes(w) && t.includes(w)));
+  if (!knockout) notes.push({ text: `Bateu ${hits.length} de ${c.jobAd.must.length} requisitos obrigatórios nas tecnologias.`, bad: hits.length < c.jobAd.must.length / 2 });
+  return { knockout, notes, askedLow };
 }
 
 // ───────────────────────── Conversa com o RH ─────────────────────────
