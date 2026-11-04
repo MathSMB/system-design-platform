@@ -16,7 +16,7 @@ if (!existsSync(dir)) {
   console.log(`[importar] Não achei o banco antigo em ${dir}. Nada para copiar.`);
   process.exit(0);
 }
-const url = process.env.DATABASE_URL || "postgres://sdp:sdp@localhost:5432/sdp";
+const url = process.env.DATABASE_URL || "postgres://sdp:sdp@localhost:5434/sdp";
 const TABLES = ["users", "profiles", "activities", "checkins", "designs", "interview_runs", "market_profiles", "study_centers", "role_research"];
 
 const old = new PGlite(dir);

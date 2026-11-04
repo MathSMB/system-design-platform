@@ -9,7 +9,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 try {
   process.loadEnvFile(join(here, "../../../.env"));
 } catch {}
-const url = process.env.DATABASE_URL || "postgres://sdp:sdp@localhost:5432/sdp";
+const url = process.env.DATABASE_URL || "postgres://sdp:sdp@localhost:5434/sdp";
 const shown = url.replace(/\/\/[^@]*@/, "//***@");
 
 const sql = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 5 });

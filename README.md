@@ -52,7 +52,7 @@ Configuração (opcional): copie `.env.example` para `.env` **na raiz**. Ele val
 
 ### Banco: Postgres no Docker
 
-Todos os apps usam o mesmo Postgres, o do `docker-compose.yml` (`postgres://sdp:sdp@localhost:5432/sdp`, dados no volume `pgdata`). O `pnpm dev` já sobe o container e aplica as migrações, mas dá para fazer à mão:
+Todos os apps usam o mesmo Postgres, o do `docker-compose.yml` (`postgres://sdp:sdp@localhost:5434/sdp`, dados no volume `pgdata`). O `pnpm dev` já sobe o container e aplica as migrações, mas dá para fazer à mão:
 
 ```bash
 pnpm db:up                # sobe o Postgres (docker compose up -d)

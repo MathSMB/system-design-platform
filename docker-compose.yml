@@ -1,4 +1,5 @@
 # Postgres compartilhado por todos os apps (pnpm db:up). Os dados ficam no volume pgdata.
+# Porta 5434 no seu computador, para não brigar com um Postgres instalado direto na máquina (5432).
 services:
   db:
     image: postgres:17-alpine
@@ -7,7 +8,7 @@ services:
       POSTGRES_PASSWORD: sdp
       POSTGRES_DB: sdp
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

@@ -16,8 +16,11 @@ const portOpen = (host, port) =>
     s.on("timeout", () => (s.destroy(), ok(false)));
   });
 
-// com DATABASE_URL própria, o banco é por sua conta; sem ela, usa o Postgres do docker-compose
-if (!process.env.DATABASE_URL && !(await portOpen("127.0.0.1", 5432))) {
+// sem DATABASE_URL (ou apontando para o do docker-compose), sobe o container se ele não estiver no ar;
+// com outra DATABASE_URL, o banco é por sua conta
+const DOCKER_URL = "postgres://sdp:sdp@localhost:5434/sdp";
+const url = process.env.DATABASE_URL || DOCKER_URL;
+if (url === DOCKER_URL && !(await portOpen("127.0.0.1", 5434))) {
   console.log("[banco] subindo o Postgres no Docker (docker compose up -d)…");
   const r = spawnSync("docker", ["compose", "up", "-d", "--wait", "db"], { cwd: root, stdio: "inherit" });
   if (r.error || r.status !== 0) {
