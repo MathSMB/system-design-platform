@@ -32,7 +32,11 @@ export const isMetric = (x: unknown): x is Metric => METRICS.some((m) => m.id ==
 
 export type GoalItem =
   | { id: string; kind: "platform"; metric: Metric; target: number }
-  | { id: string; kind: "manual"; text: string };
+  | { id: string; kind: "manual"; text: string }
+  /** Cumprir tudo o que o cronograma da Central de estudos pôs no dia (marcado sozinho). */
+  | { id: string; kind: "schedule" };
+
+export const SCHEDULE_TEXT = "Cumprir o cronograma do dia (Central de estudos)";
 
 /** "all" = todos os itens; "any" = qualquer um deles. */
 export interface Plan {
@@ -102,6 +106,9 @@ export function cleanPlan(x: unknown): Plan | null {
     while (ids.has(id)) id = `${id}-${items.length + 1}`;
     if (o.kind === "manual" && typeof o.text === "string" && o.text.trim()) {
       items.push({ id, kind: "manual", text: o.text.trim().slice(0, 120) });
+    } else if (o.kind === "schedule") {
+      if (items.some((i) => i.kind === "schedule")) continue;
+      items.push({ id, kind: "schedule" });
     } else if (o.kind === "platform" && isMetric(o.metric)) {
       const target = Math.min(20, Math.max(1, Math.round(Number(o.target) || 1)));
       items.push({ id, kind: "platform", metric: o.metric, target });
@@ -118,7 +125,7 @@ export function planOf(goal: string, saved?: unknown): Plan {
 }
 
 export function itemDone(item: GoalItem, c: DayCounts, checks: readonly string[]): boolean {
-  return item.kind === "manual" ? checks.includes(item.id) : c[item.metric] >= item.target;
+  return item.kind === "platform" ? c[item.metric] >= item.target : checks.includes(item.id);
 }
 
 /** A meta do dia foi cumprida? */
@@ -129,6 +136,7 @@ export function meets(plan: Plan, c: DayCounts, checks: readonly string[] = []):
 
 export function itemText(item: GoalItem): string {
   if (item.kind === "manual") return item.text;
+  if (item.kind === "schedule") return SCHEDULE_TEXT;
   const m = METRICS.find((x) => x.id === item.metric)!;
   return `${item.target} ${item.target === 1 ? m.one : m.many}`;
 }

@@ -117,3 +117,41 @@ export const checkins = pgTable(
 
 export type User = typeof users.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
+
+/**
+ * Central de estudos de um perfil: cargo alvo, disponibilidade, trilhas (pós, livro,
+ * certificação, projeto…), projetos sugeridos, o que você já domina e o cronograma.
+ */
+export const studyCenters = pgTable("study_centers", {
+  profileId: uuid("profile_id").primaryKey(),
+  /** Ex. "Desenvolvedor Java Pleno". */
+  targetRole: text("target_role"),
+  /** { hours: [seg..dom], targetDate?, slack } */
+  availability: jsonb("availability"),
+  /** Trilhas com unidades (capítulos, matérias, módulos). */
+  trails: jsonb("trails"),
+  /** Opções de projeto sugeridas pela IA (escolher uma vira trilha). */
+  projectOptions: jsonb("project_options"),
+  /** { "<habilidade>": 0 | 1 | 2 } = não sei, estudando, domino. */
+  skillStatus: jsonb("skill_status"),
+  /** O cronograma atual (itens por dia) e o esboço das próximas semanas. */
+  schedule: jsonb("schedule"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Pesquisa de vagas de um cargo (feita pela IA com busca na web), reaproveitada por 6 meses. */
+export const roleResearch = pgTable("role_research", {
+  /** "<cargo normalizado>:<nível>". */
+  id: text("id").primaryKey(),
+  role: text("role").notNull(),
+  level: text("level").notNull(),
+  /** "running" | "done" | "error" */
+  status: text("status").notNull(),
+  data: jsonb("data"),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  researchedAt: text("researched_at"),
+});
+
+export type StudyCenter = typeof studyCenters.$inferSelect;
+export type RoleResearchRow = typeof roleResearch.$inferSelect;

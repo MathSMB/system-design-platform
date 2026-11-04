@@ -1,6 +1,6 @@
 "use client";
 
-import { GOALS, MAX_ITEMS, METRICS, planOf, type Goal, type GoalItem, type Metric, type Plan } from "@sdp/habit";
+import { GOALS, MAX_ITEMS, METRICS, SCHEDULE_TEXT, planOf, type Goal, type GoalItem, type Metric, type Plan } from "@sdp/habit";
 import { Plus, X } from "lucide-react";
 
 export interface PlanValue {
@@ -55,7 +55,9 @@ export function PlanEditor({ value, onChange }: { value: PlanValue; onChange(v: 
         {plan.items.map((it, i) => (
           <div key={it.id} className="flex flex-wrap items-center gap-2">
             <span className={`w-20 shrink-0 font-mono text-[10px] uppercase ${it.kind === "manual" ? "text-accent" : "text-ok"}`}>{it.kind === "manual" ? "você marca" : "automático"}</span>
-            {it.kind === "manual" ? (
+            {it.kind === "schedule" ? (
+              <span className="min-w-48 flex-1 text-[13px]">{SCHEDULE_TEXT}</span>
+            ) : it.kind === "manual" ? (
               <input value={it.text} maxLength={120} onChange={(e) => setItem(i, { ...it, text: e.target.value })} placeholder="ex. 1 hora de Spring Boot" className="min-w-48 flex-1" />
             ) : (
               <>
@@ -82,6 +84,11 @@ export function PlanEditor({ value, onChange }: { value: PlanValue; onChange(v: 
             <button type="button" onClick={() => edit({ ...plan, items: [...plan.items, { id: newId(plan.items), kind: "platform", metric: "answers", target: 1 }] })} className="btn-ghost flex items-center gap-1 px-2.5 py-1 text-[12px]">
               <Plus size={12} /> Atividade da plataforma
             </button>
+            {!plan.items.some((i) => i.kind === "schedule") && (
+              <button type="button" onClick={() => edit({ ...plan, items: [...plan.items, { id: "cronograma", kind: "schedule" }] })} className="btn-ghost flex items-center gap-1 px-2.5 py-1 text-[12px]">
+                <Plus size={12} /> Cronograma do dia
+              </button>
+            )}
           </div>
         )}
       </div>

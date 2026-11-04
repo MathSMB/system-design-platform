@@ -1,6 +1,6 @@
 "use client";
 
-import { METRICS, PARTS, WEAR, addDays, intensity, itemDone, itemText, planText, weekOf, type DayResult, type DayState, type GoalItem, type HabitSummary } from "@sdp/habit";
+import { METRICS, PARTS, SCHEDULE_TEXT, WEAR, addDays, intensity, itemDone, itemText, planText, weekOf, type DayResult, type DayState, type GoalItem, type HabitSummary } from "@sdp/habit";
 import { Cpu, Flame, RotateCcw, ShieldCheck, Trophy, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -226,6 +226,18 @@ function Item({ it, h, busy, onCheck }: { it: GoalItem; h: HabitSummary; busy: b
           <span className="flex-1">{it.text}</span>
           <span className="font-mono text-[10px] uppercase text-muted">você marca</span>
         </label>
+      </li>
+    );
+  if (it.kind === "schedule")
+    return (
+      <li className={`flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 ${done ? "border-ok text-ok" : "border-border"}`}>
+        <span className="flex-1">{SCHEDULE_TEXT}</span>
+        {!done && (
+          <Link href="/estudos#cronograma" className="btn-ghost px-2.5 py-1 text-[11px]">
+            Ver o de hoje
+          </Link>
+        )}
+        <span className="font-mono text-[10px] uppercase text-muted">automático</span>
       </li>
     );
   const m = METRICS.find((x) => x.id === it.metric)!;

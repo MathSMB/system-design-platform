@@ -1,3 +1,4 @@
+import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext } from "./study";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
@@ -28,11 +29,29 @@ export class AnthropicApiProvider implements AiProvider {
     return normalizeSession(await this.json(SESSION_SYSTEM_PROMPT, SESSION_SCHEMA, buildSessionPrompt(input)));
   }
 
-  private async json(system: string, schema: object, prompt: string): Promise<unknown> {
+
+  researchRole(input: ResearchInput): Promise<unknown> {
+    return this.json(RESEARCH_SYSTEM_PROMPT, RESEARCH_SCHEMA, buildResearchPrompt(input), { web: true, timeoutMs: 20 * 60_000 });
+  }
+
+  async studyChat(input: StudyChatInput): Promise<StudyChatReply> {
+    return normalizeChat(await this.json(CHAT_SYSTEM_PROMPT, CHAT_SCHEMA, buildChatPrompt(input), { web: true, timeoutMs: 5 * 60_000 }));
+  }
+
+  async proposeProjects(input: StudyContext): Promise<unknown> {
+    return ((await this.json(PROJECTS_SYSTEM_PROMPT, PROJECTS_SCHEMA, buildProjectsPrompt(input))) as { projects?: unknown })?.projects;
+  }
+
+  async planSchedule(input: ScheduleInput): Promise<ScheduleDraft> {
+    return normalizeSchedule(await this.json(SCHEDULE_SYSTEM_PROMPT, SCHEDULE_SCHEMA, buildSchedulePrompt(input), { timeoutMs: 6 * 60_000 }));
+  }
+
+  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number } = {}): Promise<unknown> {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 16000,
       system,
+      ...(o.web ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 20 }] as any } : {}),
       output_config: {
         effort: "medium",
         format: { type: "json_schema", schema: schema as unknown as Record<string, unknown> },

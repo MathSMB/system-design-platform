@@ -1,9 +1,10 @@
 import { EMPTY, addDays, cleanHistory, computeHabit, dayInBrazil, planOf, type DayCounts } from "@sdp/habit";
+import { cleanSchedule, scheduleDone } from "@sdp/study";
 import { trackTitle, type Level } from "@sdp/hiring";
 import { and, count, eq, gte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/client";
-import { activities, checkins } from "@/lib/db/schema";
+import { activities, checkins, studyCenters } from "@/lib/db/schema";
 import { getSession } from "@/lib/session";
 
 const FIELD = { answer: "answers", stage: "stages", process: "processes", design: "designs" } as const;
@@ -18,7 +19,7 @@ export async function GET() {
   const p = s.profile;
   const today = dayInBrazil();
   const since = addDays(today, -370);
-  const [rows, marks] = await Promise.all([
+  const [rows, marks, centers] = await Promise.all([
     db
       .select({ day: activities.day, kind: activities.kind, n: count() })
       .from(activities)
@@ -28,6 +29,7 @@ export async function GET() {
       .select({ day: checkins.day, itemId: checkins.itemId })
       .from(checkins)
       .where(and(eq(checkins.profileId, p.id), gte(checkins.day, since))),
+    db.select({ schedule: studyCenters.schedule }).from(studyCenters).where(eq(studyCenters.profileId, p.id)),
   ]);
   const counts: Record<string, DayCounts> = {};
   for (const r of rows) {
@@ -38,6 +40,14 @@ export async function GET() {
   }
   const checks: Record<string, string[]> = {};
   for (const m of marks) (checks[m.day] ??= []).push(m.itemId);
-  const habit = computeHabit({ start: p.startDay < since ? since : p.startDay, today, plan: planOf(p.goal, p.plan), counts, checks, history: cleanHistory(p.planHistory) });
+  const plan = planOf(p.goal, p.plan);
+  const history = cleanHistory(p.planHistory);
+  const start = p.startDay < since ? since : p.startDay;
+  // item "cronograma do dia": cumprido quando todos os blocos do dia na Central de estudos foram feitos
+  const scheduleIds = new Set([plan, ...history.map((h) => h.plan)].flatMap((pl) => pl.items.filter((i) => i.kind === "schedule").map((i) => i.id)));
+  const schedule = cleanSchedule(centers[0]?.schedule);
+  if (scheduleIds.size && schedule)
+    for (let d = start; d <= today; d = addDays(d, 1)) if (scheduleDone(schedule, d, checks[d] ?? [])) (checks[d] ??= []).push(...scheduleIds);
+  const habit = computeHabit({ start, today, plan, counts, checks, history });
   return NextResponse.json({ db: true, session: s, title: trackTitle(p.stack, p.level as Level), habit });
 }

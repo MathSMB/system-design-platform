@@ -1,3 +1,4 @@
+import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext } from "./study";
 import { spawn } from "node:child_process";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
@@ -36,8 +37,25 @@ export class ClaudeCodeProvider implements AiProvider {
     return normalizeSession(await this.json(SESSION_SYSTEM_PROMPT, SESSION_SCHEMA, buildSessionPrompt(input)));
   }
 
-  /** Roda `claude -p` com saída JSON validada pelo schema. */
-  private async json(system: string, schema: object, prompt: string): Promise<unknown> {
+
+  researchRole(input: ResearchInput): Promise<unknown> {
+    return this.json(RESEARCH_SYSTEM_PROMPT, RESEARCH_SCHEMA, buildResearchPrompt(input), { web: true, timeoutMs: 20 * 60_000 });
+  }
+
+  async studyChat(input: StudyChatInput): Promise<StudyChatReply> {
+    return normalizeChat(await this.json(CHAT_SYSTEM_PROMPT, CHAT_SCHEMA, buildChatPrompt(input), { web: true, timeoutMs: 5 * 60_000 }));
+  }
+
+  async proposeProjects(input: StudyContext): Promise<unknown> {
+    return ((await this.json(PROJECTS_SYSTEM_PROMPT, PROJECTS_SCHEMA, buildProjectsPrompt(input))) as { projects?: unknown })?.projects;
+  }
+
+  async planSchedule(input: ScheduleInput): Promise<ScheduleDraft> {
+    return normalizeSchedule(await this.json(SCHEDULE_SYSTEM_PROMPT, SCHEDULE_SCHEMA, buildSchedulePrompt(input), { timeoutMs: 6 * 60_000 }));
+  }
+
+  /** Roda `claude -p` com saída JSON validada pelo schema. Com web, libera só a busca e a leitura de páginas. */
+  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number } = {}): Promise<unknown> {
     const args = [
       ...(this.opts.binArgs ?? []),
       "-p",
@@ -47,13 +65,12 @@ export class ClaudeCodeProvider implements AiProvider {
       JSON.stringify(schema),
       "--system-prompt",
       system,
-      "--tools",
-      "",
+      ...(o.web ? ["--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch"] : ["--tools", ""]),
       "--no-session-persistence",
     ];
     if (this.opts.model) args.push("--model", this.opts.model);
 
-    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, prompt, this.opts.timeoutMs ?? 180_000);
+    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, prompt, Math.max(this.opts.timeoutMs ?? 180_000, o.timeoutMs ?? 0));
     return parseClaudeJson(stdout);
   }
 }

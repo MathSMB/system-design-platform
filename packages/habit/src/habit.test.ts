@@ -29,6 +29,13 @@ describe("metas", () => {
     expect(meets(p, A(0), ["i1", "i2"])).toBe(true);
   });
 
+  it("item do cronograma: conta quando o dia do cronograma foi feito", () => {
+    const p = cleanPlan({ mode: "all", items: [{ kind: "schedule" }, { kind: "schedule" }] })!;
+    expect(p.items).toEqual([{ id: "i1", kind: "schedule" }]);
+    expect(meets(p, A(3))).toBe(false);
+    expect(meets(p, A(0), ["i1"])).toBe(true);
+  });
+
   it("limpa planos inválidos", () => {
     expect(cleanPlan({ items: [] })).toBeNull();
     expect(cleanPlan({ items: [{ kind: "manual", text: "" }] })).toBeNull();

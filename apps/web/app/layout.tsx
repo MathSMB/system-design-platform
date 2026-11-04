@@ -31,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/estudo" className="transition-colors hover:text-accent" data-tour="nav-estudo">Estudo</Link>
             <Link href="/entrevista" className="transition-colors hover:text-accent-2">Entrevista</Link>
             <Link href="/processo-seletivo" className="transition-colors hover:text-accent">Processo seletivo</Link>
+            <Link href="/estudos" className="transition-colors hover:text-accent-2">Central de estudos</Link>
             <Link href="/habito" className="transition-colors hover:text-ok">Hábito</Link>
             <Link href="/historico" className="transition-colors hover:text-accent">Histórico</Link>
             <Link href="/canvas" className="transition-colors hover:text-accent">Canvas livre</Link>

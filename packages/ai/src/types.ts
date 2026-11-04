@@ -1,6 +1,7 @@
 import type { Graph, SimResult } from "@sdp/sim-engine";
 import type { AnswerEvaluation, AnswerInput } from "./answer";
 import type { SessionFeedback, SessionInput } from "./session";
+import type { ResearchInput, ScheduleDraft, ScheduleInput, StudyChatInput, StudyChatReply, StudyContext } from "./study";
 
 export interface EvaluationInput {
   /** Enunciado do problema (ex. "Projete um encurtador de URL"). */
@@ -44,4 +45,12 @@ export interface AiProvider {
   evaluateAnswer(input: AnswerInput): Promise<AnswerEvaluation>;
   /** Feedback geral de uma sessão inteira de entrevista. */
   evaluateSession(input: SessionInput): Promise<SessionFeedback>;
+  /** Pesquisa as vagas do cargo na web (demora minutos). Devolve o JSON bruto, limpo depois com cleanResearch. */
+  researchRole(input: ResearchInput): Promise<unknown>;
+  /** Conversa para montar trilhas (pós, livro, certificação…) e mudar o plano. */
+  studyChat(input: StudyChatInput): Promise<StudyChatReply>;
+  /** 3 projetos de portfólio (JSON bruto, limpo depois com cleanProjects). */
+  proposeProjects(input: StudyContext): Promise<unknown>;
+  /** Cronograma dia a dia em blocos curtos. */
+  planSchedule(input: ScheduleInput): Promise<ScheduleDraft>;
 }
