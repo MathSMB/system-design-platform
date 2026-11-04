@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Briefcase, Compass, Cpu, LayoutDashboard, Network, UserRound, type LucideIcon } from "lucide-react";
 import { getSession, type Session } from "@sdp/auth";
 import { recentEvents } from "@sdp/events";
@@ -28,6 +29,8 @@ export default async function Painel() {
   } catch {
     dbUp = false;
   }
+  // o Painel é a área de quem entrou: sem conta, vai para o login
+  if (dbUp && !session) redirect("/conta");
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
       <div className="flex items-center gap-2 hud-label">

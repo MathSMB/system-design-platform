@@ -1,4 +1,5 @@
 import { Radio } from "lucide-react";
+import { redirect } from "next/navigation";
 import { getSession } from "@sdp/auth";
 import { EVENT_TYPES, recentEvents } from "@sdp/events";
 import { EventList } from "@/components/EventList";
@@ -8,6 +9,7 @@ export const metadata = { title: "Eventos · System Design Lab" };
 
 export default async function Eventos() {
   const session = await getSession().catch(() => null);
+  if (!session) redirect("/conta");
   const events = session?.profile ? await recentEvents(session.profile.id, 100) : [];
   return (
     <main className="mx-auto max-w-4xl px-4 py-12">

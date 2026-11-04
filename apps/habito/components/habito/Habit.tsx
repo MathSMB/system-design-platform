@@ -50,31 +50,27 @@ export function Habit() {
   const profile = data?.session?.profile;
   return (
     <main className="mx-auto max-w-6xl px-4 py-12">
-      <div className="flex items-center gap-2 hud-label !text-ok">
-        <Cpu size={14} /> Hábito
-      </div>
-      <h1 className="mt-3 font-display text-xl leading-relaxed">
-        Sua <span className="text-ok glow">máquina.</span>
-      </h1>
-      <p className="mt-3 max-w-3xl text-muted">
-        Cada dia de meta cumprida instala uma peça na placa-mãe. Dia perdido gasta um failover da semana; sem failover, a máquina se desgasta. O próximo dia cumprido conserta um nível de desgaste. Se o desgaste chegar ao fim, a máquina queima e a montagem recomeça do zero.
-      </p>
+      {data?.session && (
+        <>
+          <div className="flex items-center gap-2 hud-label !text-ok">
+            <Cpu size={14} /> Hábito
+          </div>
+          <h1 className="mt-3 font-display text-xl leading-relaxed">
+            Sua <span className="text-ok glow">máquina.</span>
+          </h1>
+          <p className="mt-3 max-w-3xl text-muted">
+            Cada dia de meta cumprida instala uma peça na placa-mãe. Dia perdido gasta um failover da semana; sem failover, a máquina se desgasta. O próximo dia cumprido conserta um nível de desgaste.
+            Se o desgaste chegar ao fim, a máquina queima e a montagem recomeça do zero.
+          </p>
+        </>
+      )}
       <HabitIntro />
       <div id="comecar" className="scroll-mt-20" />
 
       {!data && <p className="mt-8 text-muted">Carregando…</p>}
       {data && !data.db && (
         <div className="panel mt-8 p-4 text-sm text-muted">
-          O banco não respondeu. Abra o Docker Desktop, rode <code className="text-text">pnpm db:up</code> na raiz do projeto e reinicie o{" "}
-          <code className="text-text">pnpm dev</code>.
-        </div>
-      )}
-      {data?.db && !data.session && (
-        <div className="panel mt-8 flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
-          <span className="text-muted">Entre na sua conta para ter a sua máquina. É só um clique, sem senha.</span>
-          <Link href={appUrl("painel", "/conta")} className="btn-neon px-4 py-2 text-xs">
-            Entrar ▶
-          </Link>
+          O banco não respondeu. Abra o Docker Desktop, rode <code className="text-text">pnpm db:up</code> na raiz do projeto e reinicie o <code className="text-text">pnpm dev</code>.
         </div>
       )}
       {data?.session && !h && (
@@ -263,7 +259,9 @@ function Item({ it, h, busy, onCheck }: { it: GoalItem; h: HabitSummary; busy: b
 function Parts({ h }: { h: HabitSummary }) {
   return (
     <div className="panel flex flex-col gap-2 p-4">
-      <div className="hud-label">Peças ({Math.min(h.board.parts, PARTS.length)} de {PARTS.length})</div>
+      <div className="hud-label">
+        Peças ({Math.min(h.board.parts, PARTS.length)} de {PARTS.length})
+      </div>
       <ol className="grid gap-x-4 gap-y-1 text-[13px] sm:grid-cols-2">
         {PARTS.map((p, i) => (
           <li key={p.id} className={i < h.board.parts ? "text-ok" : i === h.board.parts ? "text-text" : "text-muted"} title={p.d}>
@@ -342,11 +340,7 @@ function Calendar({ h }: { h: HabitSummary }) {
               const st = d?.state;
               const n = d ? intensity(h.plan, d.counts, d.checks) : 0;
               const fill =
-                st === "wear" || st === "burn"
-                  ? `color-mix(in srgb, ${STATE[st].color} 70%, var(--bg))`
-                  : n
-                    ? `color-mix(in srgb, var(--ok) ${OP[n]! * 100}%, var(--bg))`
-                    : "var(--panel-2)";
+                st === "wear" || st === "burn" ? `color-mix(in srgb, ${STATE[st].color} 70%, var(--bg))` : n ? `color-mix(in srgb, var(--ok) ${OP[n]! * 100}%, var(--bg))` : "var(--panel-2)";
               const stroke = st === "failover" ? "var(--warn)" : st === "repair" ? "var(--accent)" : day === h.today ? "var(--text)" : "var(--border)";
               return (
                 <rect key={day} x={i * (C + G)} y={16 + j * (C + G)} width={C} height={C} rx={2} fill={fill} stroke={stroke} strokeWidth={0.8}>
@@ -362,7 +356,9 @@ function Calendar({ h }: { h: HabitSummary }) {
           <span key={s} className="flex items-center gap-1.5">
             <span
               className="inline-block h-2.5 w-2.5 rounded-sm"
-              style={s === "failover" || s === "repair" ? { border: `1px solid ${STATE[s].color}` } : { background: s === "install" ? "var(--ok)" : `color-mix(in srgb, ${STATE[s].color} 70%, var(--bg))` }}
+              style={
+                s === "failover" || s === "repair" ? { border: `1px solid ${STATE[s].color}` } : { background: s === "install" ? "var(--ok)" : `color-mix(in srgb, ${STATE[s].color} 70%, var(--bg))` }
+              }
             />
             {STATE[s].label}
           </span>

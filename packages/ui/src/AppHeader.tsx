@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AccountChip } from "./Account";
-import { APP_LIST, appUrl, type AppId } from "./apps";
+import { AppsNav } from "./AppsNav";
+import { APP_LIST, type AppId } from "./apps";
 
 /** Classes fixas por cor (o Tailwind só gera classes que aparecem inteiras no código). */
 const TONE = {
@@ -33,25 +34,7 @@ export function AppHeader({ current, nav = [], extra }: { current: AppId; nav?: 
   return (
     <header className="relative border-b border-border bg-bg/80 backdrop-blur">
       <div className="flex h-12 items-center gap-3 px-4">
-        <a href={appUrl("painel")} className="flex shrink-0 items-center gap-2 font-display text-[11px] text-accent glow">
-          <span className="text-accent-2">&gt;</span>
-          <span className="hidden lg:inline">SYSTEM_DESIGN_LAB</span>
-          <span className="lg:hidden">SDL</span>
-          <span className="cursor-blink">_</span>
-        </a>
-        <nav className="no-scrollbar flex min-w-0 flex-1 gap-4 overflow-x-auto whitespace-nowrap text-xs font-semibold uppercase tracking-[0.1em] text-muted">
-          {APP_LIST.map((a) =>
-            a.id === current ? (
-              <a key={a.id} href="/" aria-current="page" className={`relative ${TONE[a.color].text} glow`}>
-                {a.title}
-              </a>
-            ) : (
-              <a key={a.id} href={appUrl(a.id)} className={`transition-colors ${TONE[a.color].hover}`}>
-                {a.title}
-              </a>
-            ),
-          )}
-        </nav>
+        <AppsNav current={current} />
         <AccountChip current={current} />
         {extra}
       </div>

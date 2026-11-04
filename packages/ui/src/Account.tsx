@@ -51,6 +51,11 @@ export function Account() {
       window.location.href = back.url;
       return true;
     }
+    // entrou agora pelo Painel: vai para a visão geral
+    if (!back && !data?.session && d.session) {
+      window.location.href = "/";
+      return true;
+    }
     router.refresh();
     return true;
   }

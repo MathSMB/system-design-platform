@@ -90,26 +90,27 @@ export function Study() {
   const c = data?.center;
   return (
     <main className="mx-auto max-w-6xl px-4 py-12">
-      <div className="flex items-center gap-2 hud-label !text-accent-2">
-        <Compass size={14} /> Central de estudos
-      </div>
-      <h1 className="mt-3 font-display text-xl leading-relaxed">
-        Do anúncio da vaga à <span className="text-accent-2 glow">meta de hoje.</span>
-      </h1>
-      <p className="mt-3 max-w-3xl text-muted">
-        A IA pesquisa as vagas do cargo que você busca, mostra o que mais pedem, sugere projetos e monta o seu cronograma em blocos curtos, com revisão espaçada. Você junta a pós, a certificação e o livro que está lendo, conversando com ela.
-      </p>
+      {data?.session && (
+        <>
+          <div className="flex items-center gap-2 hud-label !text-accent-2">
+            <Compass size={14} /> Central de estudos
+          </div>
+          <h1 className="mt-3 font-display text-xl leading-relaxed">
+            Do anúncio da vaga à <span className="text-accent-2 glow">meta de hoje.</span>
+          </h1>
+          <p className="mt-3 max-w-3xl text-muted">
+            A IA pesquisa as vagas do cargo que você busca, mostra o que mais pedem, sugere projetos e monta o seu cronograma em blocos curtos, com revisão espaçada. Você junta a pós, a certificação e
+            o livro que está lendo, conversando com ela.
+          </p>
+        </>
+      )}
       <StudyIntro />
       <div id="comecar" className="scroll-mt-20" />
 
       {!data && <p className="mt-8 text-muted">Carregando…</p>}
-      {data && !data.db && <div className="panel mt-8 p-4 text-sm text-muted">O banco não abriu. Reinicie o <code className="text-text">pnpm dev</code> e veja o terminal.</div>}
-      {data?.db && !data.session && (
-        <div className="panel mt-8 flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
-          <span className="text-muted">Entre na sua conta para ter a sua central. É só um clique, sem senha.</span>
-          <Link href={appUrl("painel", "/conta")} className="btn-neon px-4 py-2 text-xs">
-            Entrar ▶
-          </Link>
+      {data && !data.db && (
+        <div className="panel mt-8 p-4 text-sm text-muted">
+          O banco não abriu. Reinicie o <code className="text-text">pnpm dev</code> e veja o terminal.
         </div>
       )}
       {data?.session && !c && (
@@ -272,7 +273,10 @@ function ResearchView({ res, levels, status, patch }: { res: RoleResearch; level
           <p className="mt-2 text-[13px] leading-relaxed">{res.summary}</p>
           {res.band && (
             <p className="mt-3 text-[13px]">
-              Faixa CLT: <span className="font-mono text-ok">{money(res.band[0])} a {money(res.band[1])}</span>
+              Faixa CLT:{" "}
+              <span className="font-mono text-ok">
+                {money(res.band[0])} a {money(res.band[1])}
+              </span>
             </p>
           )}
         </div>
@@ -307,7 +311,10 @@ const LEVEL_COLOR = ["text-muted", "text-warn", "text-ok"];
 
 function SkillRow({ s, level, marked, onLevel }: { s: Skill; level: SkillLevel; marked: boolean; onLevel(l: SkillLevel | null): void }) {
   return (
-    <li className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-3 sm:grid-cols-[minmax(0,14rem)_1fr_auto]" title={`${s.name}: ${s.frequency}% dos anúncios${s.must ? " (obrigatório na maioria)" : ""} · ${s.category}`}>
+    <li
+      className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-3 sm:grid-cols-[minmax(0,14rem)_1fr_auto]"
+      title={`${s.name}: ${s.frequency}% dos anúncios${s.must ? " (obrigatório na maioria)" : ""} · ${s.category}`}
+    >
       <span className="truncate text-[13px]">
         {s.name}
         {s.must && <span className="ml-1 text-[10px] text-accent-2">●</span>}
@@ -688,7 +695,9 @@ function Plan({ data, c, patch, load }: { data: Data; c: CenterData; patch(b: un
           )}
           {s && inGoal && <span className="text-[12px] text-ok">O cronograma faz parte da sua meta do dia.</span>}
         </div>
-        {data.needsReplan && !busy && <div className="rounded-md border border-warn/50 px-3 py-2 text-[13px] text-warn">Hora de replanejar: é domingo ou o cronograma está acabando. O que já passou não muda.</div>}
+        {data.needsReplan && !busy && (
+          <div className="rounded-md border border-warn/50 px-3 py-2 text-[13px] text-warn">Hora de replanejar: é domingo ou o cronograma está acabando. O que já passou não muda.</div>
+        )}
       </div>
 
       {s && (

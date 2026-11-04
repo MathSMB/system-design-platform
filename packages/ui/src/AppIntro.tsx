@@ -239,7 +239,7 @@ export function AppIntro({
   );
 }
 
-const IntroCtx = createContext<{ app: AppId; start: { label: string; href: string }; tone: IntroTone; openWithoutAccount: boolean; onStart?: () => void } | null>(null);
+export const IntroCtx = createContext<{ app: AppId; start: { label: string; href: string }; tone: IntroTone; openWithoutAccount: boolean; onStart?: () => void } | null>(null);
 
 /** Faixa de chamada no meio ou no fim da landing: título, uma linha e o botão grande, centralizados. */
 export function IntroCta({ title, sub }: { title?: ReactNode; sub?: ReactNode }) {

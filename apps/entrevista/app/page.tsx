@@ -3,6 +3,7 @@ import { Briefcase, Coffee, History, Network, type LucideIcon } from "lucide-rea
 import { COMPANIES, JAVA_PLENO, STACKS } from "@sdp/hiring";
 import { appUrl } from "@sdp/ui";
 import { EntrevistaIntro } from "@/components/home/Intro";
+import { getSession } from "@sdp/auth";
 
 interface Card {
   href: string;
@@ -47,7 +48,9 @@ const CARDS: Card[] = [
   },
 ];
 
-export default function Entrevista() {
+export default async function Entrevista() {
+  // sem conta: só a apresentação e o botão de entrar; os treinos aparecem depois do login
+  const logged = await getSession().then(Boolean).catch(() => false);
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
       <div className="flex items-center gap-2 hud-label !text-bad">
@@ -58,6 +61,8 @@ export default function Entrevista() {
       </h1>
       <p className="mt-3 max-w-2xl text-muted">Treine a entrevista inteira ou só a parte técnica da sua stack. A IA avalia cada resposta e, no fim, dá um feedback geral.</p>
       <EntrevistaIntro />
+      {logged && (
+      <>
       <h2 id="comecar" className="hud-label mt-10 scroll-mt-20 !text-bad">Escolha o treino</h2>
       <div className="mt-3 grid gap-4 md:grid-cols-3">
         {CARDS.map(({ href, title, body, count, Icon, tone }) => (
@@ -76,6 +81,8 @@ export default function Entrevista() {
           <div className="text-sm text-muted">Fica no app System Design: desenhe até cumprir o SLO ou diagnostique o bug de produção.</div>
         </div>
       </a>
+      </>
+      )}
     </main>
   );
 }

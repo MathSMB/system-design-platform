@@ -1,14 +1,124 @@
 "use client";
 
-import { AppIntro } from "@sdp/ui";
-import { Cpu, Repeat, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { AppIntro, IntroCta, LBento, LBlock, LChecks, LChips, LHeading, LIconItem, LRow, LShot } from "@sdp/ui";
+import {
+  BrainCircuit,
+  CalendarDays,
+  Cpu,
+  Flame,
+  History,
+  ListChecks,
+  MessageSquareText,
+  Repeat,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Trophy,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import { DEMO_CUES } from "../demo-cues";
+
+const P = "/demo/prints";
+
+function HabitoLanding() {
+  return (
+    <>
+      <IntroCta />
+
+      <LRow
+        text={
+          <>
+            <LHeading kicker="A placa-mãe" title="Cada dia cumprido instala uma peça" sub="Um número de dias seguidos não dá vontade de voltar amanhã. Uma máquina montando dá." />
+            <ul className="flex flex-col gap-5">
+              <LIconItem Icon={Cpu} title="15 peças" body="Do processador à iluminação RGB, cada uma com animação de encaixe." />
+              <LIconItem Icon={Sparkles} title="Overclock" body="Com a placa completa, cada dia cumprido acelera as ventoinhas." />
+              <LIconItem Icon={Trophy} title="Ofensiva e recorde" body="Marcos de 7, 30, 66 e 100 dias." />
+            </ul>
+          </>
+        }
+        media={<LShot src={`${P}/placa.jpg`} alt="A placa-mãe completa, com water cooler, placa de vídeo e RGB" />}
+      />
+
+      <LRow
+        flip
+        text={
+          <>
+            <LHeading kicker="Desgaste e conserto" title="Tropeçar tem consequência, mas não zera" sub="App que zera tudo no primeiro tropeço faz você desistir. Aqui, você conserta." />
+            <ul className="flex flex-col gap-5">
+              <LIconItem Icon={ShieldCheck} title="2 failovers por semana" body="O dia perdido gasta um failover, e nada quebra." />
+              <LIconItem Icon={Flame} color="var(--bad)" title="Sem failover, a máquina se desgasta" body="Seis níveis, cada um visível na placa:" />
+            </ul>
+            <LChips
+              items={[
+                { text: "Poeira", color: "var(--muted)" },
+                { text: "Engasgo", color: "var(--warn)" },
+                { text: "Superaquecimento", color: "var(--warn)" },
+                { text: "Ventoinha parada", color: "var(--bad)" },
+                { text: "Curto", color: "var(--bad)" },
+                { text: "Vazamento", color: "var(--bad)" },
+              ]}
+            />
+            <LIconItem Icon={Wrench} title="O próximo dia cumprido conserta um nível" body="No 6º nível a máquina queima e a montagem recomeça." />
+          </>
+        }
+        media={<LShot src={`${P}/desgaste.jpg`} alt="Placa com 4 níveis de desgaste: fogo, ventoinha parada e curto" />}
+      />
+
+      <LBlock>
+        <LHeading center kicker="Meta do dia" title="A meta conta sozinha o que você fez nos outros apps" sub="Nada de marcar à mão tudo o que estudou. Só o estudo livre é com você." />
+        <LBento
+          items={[
+            { Icon: MessageSquareText, name: "Entrevista", body: "Respostas avaliadas e etapas do processo seletivo." },
+            { Icon: BrainCircuit, name: "System Design", body: "Casos de system design avaliados pela IA." },
+            { Icon: CalendarDays, name: "Estudos", body: "Os blocos do cronograma de hoje." },
+            { Icon: ListChecks, name: "Estudo livre", body: "O que você marca aqui, com um clique." },
+          ]}
+        />
+        <div className="mx-auto mt-10 max-w-5xl">
+          <LShot src={`${P}/meta.jpg`} alt="A meta de hoje com estudo livre e uma resposta avaliada pela IA" />
+        </div>
+      </LBlock>
+
+      <LRow
+        text={
+          <>
+            <LHeading kicker="Meta do seu jeito" title="Uma meta que cabe na sua fase" sub="Meta fixa demais quebra na semana corrida; fácil demais não leva a lugar nenhum." />
+            <LChips items={[{ text: "Sugerida" }, { text: "Leve" }, { text: "Regular" }, { text: "Intensa" }, { text: "Do seu jeito" }]} />
+            <LChecks items={["Modelos de 5 a 40 minutos por dia", "Até 8 itens, com 'todos' ou 'qualquer um' para cumprir", "Um perfil por vaga, cada um com a sua placa"]} />
+            <LIconItem Icon={History} title="O passado não muda" body="Trocar a meta vale a partir de hoje." />
+          </>
+        }
+        media={<LShot src={`${P}/editar-meta.jpg`} alt="Editor da meta com os modelos Sugerida, Leve, Regular, Intensa e Do seu jeito" />}
+      />
+
+      <LBlock>
+        <LHeading center kicker="Calendário" title="Veja o ano inteiro de uma vez" sub="Os dias em que você sempre falha, os meses bons e os ruins, com a cor do que aconteceu na placa." />
+        <div className="mx-auto mt-10 max-w-5xl">
+          <LShot src={`${P}/calendario.jpg`} alt="Calendário do último ano com a cor de cada dia" />
+        </div>
+      </LBlock>
+
+      <LBlock>
+        <LHeading center kicker="E mais" title="Feito para durar meses" />
+        <ul className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-3">
+          <LIconItem Icon={Zap} title="Animação do que mudou" body="Ao abrir, a placa mostra a peça nova, o conserto ou o desgaste." />
+          <LIconItem Icon={Repeat} title="Esqueceu de marcar?" body="Registre um dia que passou." />
+          <LIconItem Icon={Target} title="Uma placa por vaga" body="Cada perfil tem a sua meta e a sua máquina." />
+        </ul>
+      </LBlock>
+
+      <IntroCta title="Pronto para montar a sua máquina?" sub="O primeiro dia cumprido já instala o processador." />
+    </>
+  );
+}
 
 export function HabitIntro() {
   return (
     <AppIntro
       app="habito"
       start={{ label: "Ver a minha placa-mãe", href: "/#comecar" }}
+      requireLogin
       id="habito"
       tone="ok"
       name="o Hábito"
@@ -23,65 +133,9 @@ export function HabitIntro() {
         { Icon: ShieldCheck, title: "Tropeçar não zera", body: "2 failovers por semana. Sem eles, a máquina se desgasta, e o próximo dia cumprido conserta um nível." },
         { Icon: Zap, title: "Conta sozinho", body: "Respostas avaliadas, etapas do processo seletivo, desenhos de system design e os blocos da Central de estudos entram na meta sem você marcar." },
       ]}
-      showcase={[
-        {
-          img: "/demo/prints/placa.jpg",
-          alt: "A placa-mãe completa, com water cooler, placa de vídeo e RGB",
-          tag: "A placa-mãe",
-          title: "Cada dia cumprido instala uma peça",
-          problem: "Contador de dias seguidos é abstrato: um número não dá vontade de voltar amanhã.",
-          body: "A sua constância vira uma placa-mãe neon montada peça por peça: processador, memória, SSD, water cooler, VRM, placa de vídeo, até a iluminação RGB. A tela anima o que mudou desde a última visita.",
-          bullets: ["15 peças, cada uma com animação de encaixe e trilhas que acendem", "Com a placa completa, cada dia vira overclock", "Ofensiva, recorde e marcos de 7, 30, 66 e 100 dias"],
-        },
-        {
-          img: "/demo/prints/desgaste.jpg",
-          alt: "Placa com 4 níveis de desgaste: fogo, ventoinha parada e curto",
-          tag: "Desgaste e conserto",
-          title: "Dia perdido tem consequência, mas não zera tudo",
-          problem: "App de hábito que zera tudo no primeiro tropeço faz você desistir. E um que não cobra nada não muda nada.",
-          body: "Você tem 2 failovers por semana para dias perdidos. Sem failover, a máquina se desgasta: poeira, engasgo, superaquecimento, ventoinha parada, curto e vazamento. Cada dia cumprido conserta um nível.",
-          bullets: ["6 níveis de desgaste, cada um visível na placa", "No 6º nível a máquina queima e a montagem recomeça", "A marca de queimado fica, para lembrar"],
-        },
-        {
-          img: "/demo/prints/meta.jpg",
-          alt: "A meta de hoje com estudo livre e uma resposta avaliada pela IA",
-          tag: "Meta do dia",
-          title: "A meta conta sozinha o que você fez nos outros apps",
-          problem: "Marcar à mão tudo o que estudou é trabalho a mais, e você acaba esquecendo de marcar.",
-          body: "A meta junta o que você marca (estudo livre) com o que conta sozinho: respostas avaliadas na Entrevista, etapas de processo, desenhos do System Design e os blocos da Central de estudos.",
-          bullets: ["\"Todos os itens\" ou \"qualquer um\" para cumprir", "O que vem dos outros apps chega pela API de eventos", "Marque um dia que esqueceu de registrar"],
-        },
-        {
-          img: "/demo/prints/editar-meta.jpg",
-          alt: "Editor da meta com os modelos Sugerida, Leve, Regular, Intensa e Do seu jeito",
-          tag: "Meta do seu jeito",
-          title: "Uma meta que cabe na sua fase",
-          problem: "Meta fixa demais quebra na semana corrida; meta fácil demais não leva a lugar nenhum.",
-          body: "Escolha um modelo pronto ou monte a sua com até 8 itens. Trocar a meta não reescreve o passado: cada dia é julgado com a meta que valia nele.",
-          bullets: ["Modelos com o tempo estimado (de 5 a 40 min)", "Itens seus, da plataforma ou o cronograma do dia", "Um perfil por vaga, cada um com a sua placa"],
-        },
-        {
-          img: "/demo/prints/calendario.jpg",
-          alt: "Calendário do último ano com a cor de cada dia",
-          tag: "Calendário",
-          title: "Veja o ano inteiro de uma vez",
-          problem: "Sem histórico, você não percebe o padrão: os dias da semana em que sempre falha, os meses bons e os ruins.",
-          body: "O calendário mostra cada dia do último ano com a cor do que aconteceu na placa.",
-          bullets: ["Peça instalada, conserto, failover, desgaste e queima", "Passe o mouse num dia para ver o estado e a peça instalada"],
-        },
-      ]}
-      features={[
-        { Icon: Sparkles, title: "Overclock", body: "Com as 15 peças instaladas, cada dia cumprido vira um ponto de overclock e as ventoinhas giram mais rápido." },
-        { Icon: ShieldCheck, title: "Failover", body: "2 por semana: o dia perdido gasta um failover e nada quebra." },
-        { Icon: Repeat, title: "O passado não muda", body: "Trocar a meta vale a partir de hoje; os dias anteriores continuam com a meta antiga." },
-      ]}
-      steps={[
-        { title: "Crie o perfil", body: "No Painel: a vaga que você treina e a meta do dia." },
-        { title: "Treine nos outros apps", body: "O que conta para a meta é marcado sozinho; o seu estudo livre você marca aqui." },
-        { title: "Abra a placa-mãe", body: "A tela anima o que mudou desde a última visita: peça nova, conserto ou desgaste." },
-        { title: "Não deixe queimar", body: "No 6º nível de desgaste a máquina queima e a montagem recomeça do zero." },
-      ]}
       video={{ src: "/demo/habito.mp4", poster: "/demo/habito.jpg", cues: DEMO_CUES }}
-    />
+    >
+      <HabitoLanding />
+    </AppIntro>
   );
 }
