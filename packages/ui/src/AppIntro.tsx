@@ -3,7 +3,7 @@
 import { Check, ChevronDown, LogIn, Maximize2, Pause, Play, type LucideIcon } from "lucide-react";
 import type { AppId } from "./apps";
 import { loginUrl, useSession } from "./useSession";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 /** Classes fixas por cor (o Tailwind só gera classes que aparecem inteiras no código). */
 const TONE = {
@@ -75,11 +75,12 @@ export function AppIntro({
   headline,
   lead,
   points,
-  showcase,
-  features,
-  steps,
+  showcase = [],
+  features = [],
+  steps = [],
   video,
   cta,
+  children,
 }: {
   app: AppId;
   /** O botão principal: onde começar a usar o app (ex. "/#comecar"). Sem conta, passa antes pelo login. */
@@ -95,12 +96,14 @@ export function AppIntro({
   lead: ReactNode;
   points: IntroPoint[];
   /** As funcionalidades principais, cada uma com print, problema e solução. */
-  showcase: IntroShowcase[];
+  showcase?: IntroShowcase[];
   /** O resto do que o app faz, numa grade curta no fim. */
-  features: IntroFeature[];
-  steps: IntroStep[];
+  features?: IntroFeature[];
+  steps?: IntroStep[];
   video: DemoVideo;
   cta?: ReactNode;
+  /** Landing page própria do app (seções com IntroCta); substitui showcase, features e steps. */
+  children?: ReactNode;
 }) {
   const t = TONE[tone];
   const [open, setOpen] = useState(true);
@@ -131,7 +134,9 @@ export function AppIntro({
     } catch {}
   };
 
-  const startBtn = <StartButtons app={app} start={start} tone={tone} openWithoutAccount={openWithoutAccount} onStart={start.href.endsWith("#comecar") ? goStart : undefined} />;
+  const onStart = start.href.endsWith("#comecar") ? goStart : undefined;
+  const startBtn = <StartButtons app={app} start={start} tone={tone} openWithoutAccount={openWithoutAccount} onStart={onStart} />;
+  const landing = children != null;
   if (!open)
     return (
       <div className={`panel mt-6 flex flex-wrap items-center gap-3 px-4 py-3 text-sm transition-colors ${t.hover}`}>
@@ -163,16 +168,27 @@ export function AppIntro({
               </li>
             ))}
           </ul>
-          <div className="mt-1">{startBtn}</div>
+          {!landing && <div className="mt-1">{startBtn}</div>}
         </div>
         <DemoPlayer tone={tone} video={video} />
       </div>
 
-      {showcase.map((x, i) => (
+      {landing && (
+        <IntroCtx.Provider value={{ app, start, tone, openWithoutAccount, onStart }}>
+          {children}
+          <div className="flex justify-center border-t border-border p-4">
+            <button onClick={close} className="text-[12px] uppercase tracking-[0.14em] text-muted hover:text-text">
+              Entendi, esconder a apresentação
+            </button>
+          </div>
+        </IntroCtx.Provider>
+      )}
+
+      {!landing && showcase.map((x, i) => (
         <Showcase key={x.title} x={x} i={i} tone={tone} />
       ))}
 
-      {features.length > 0 && (
+      {!landing && features.length > 0 && (
         <div className="border-t border-border p-5 sm:p-8">
           <div className={`hud-label ${t.text}`}>// e também</div>
           <ul className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -191,6 +207,7 @@ export function AppIntro({
         </div>
       )}
 
+      {!landing && (
       <div className="border-t border-border bg-panel-2/40 p-5 sm:p-6">
         <div className={`hud-label ${t.text}`}>// como funciona</div>
         <ol className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -210,7 +227,23 @@ export function AppIntro({
           </button>
         </div>
       </div>
+      )}
     </section>
+  );
+}
+
+const IntroCtx = createContext<{ app: AppId; start: { label: string; href: string }; tone: IntroTone; openWithoutAccount: boolean; onStart?: () => void } | null>(null);
+
+/** Faixa de chamada no meio ou no fim da landing: título, uma linha e o botão grande, centralizados. */
+export function IntroCta({ title, sub }: { title?: ReactNode; sub?: ReactNode }) {
+  const c = useContext(IntroCtx);
+  if (!c) return null;
+  return (
+    <div className="flex flex-col items-center gap-4 border-t border-border px-5 py-12 text-center sm:py-16">
+      {title && <h3 className="max-w-2xl font-display text-base leading-relaxed sm:text-xl">{title}</h3>}
+      {sub && <p className="max-w-xl text-base text-muted sm:text-lg">{sub}</p>}
+      <StartButtons app={c.app} start={c.start} tone={c.tone} openWithoutAccount={c.openWithoutAccount} onStart={c.onStart} big />
+    </div>
   );
 }
 
@@ -253,20 +286,21 @@ function Showcase({ x, i, tone }: { x: IntroShowcase; i: number; tone: IntroTone
  * "Começar": com conta vai direto para o app; sem conta, passa pelo login do Painel
  * e volta para cá. Apps que funcionam sem conta também oferecem "Testar sem conta".
  */
-function StartButtons({ app, start, tone, openWithoutAccount, onStart }: { app: AppId; start: { label: string; href: string }; tone: IntroTone; openWithoutAccount: boolean; onStart?: () => void }) {
+function StartButtons({ app, start, tone, openWithoutAccount, onStart, big = false }: { app: AppId; start: { label: string; href: string }; tone: IntroTone; openWithoutAccount: boolean; onStart?: () => void; big?: boolean }) {
   const s = useSession();
   const t = TONE[tone];
-  if (s === undefined) return <div className="h-9" />;
+  const size = big ? "px-9 py-4 text-sm" : "px-5 py-2.5 text-xs";
+  if (s === undefined) return <div className={big ? "h-[52px]" : "h-9"} />;
   if (s)
     return (
-      <a href={start.href} onClick={onStart} className="btn-neon inline-flex items-center gap-2 px-5 py-2.5 text-xs">
+      <a href={start.href} onClick={onStart} className={`btn-neon inline-flex items-center gap-2 ${size}`}>
         {start.label} ▶
       </a>
     );
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <a href={loginUrl(app, start.href)} className="btn-neon inline-flex items-center gap-2 px-5 py-2.5 text-xs">
-        <LogIn size={14} /> Entrar e começar ▶
+    <div className={`flex flex-wrap items-center gap-3 ${big ? "flex-col" : ""}`}>
+      <a href={loginUrl(app, start.href)} className={`btn-neon inline-flex items-center gap-2 ${size}`}>
+        <LogIn size={big ? 17 : 14} /> Entrar e começar ▶
       </a>
       {openWithoutAccount && (
         <a href={start.href} onClick={onStart} className={`text-[13px] text-muted underline-offset-4 hover:underline ${t.hover}`}>
