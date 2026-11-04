@@ -2,10 +2,11 @@
 
 import { planOf, planText } from "@sdp/habit";
 import { AREAS, LEVELS, STACKS, getStack, type AreaId, type Level } from "@sdp/hiring";
-import { LogOut, Plus, UserRound } from "lucide-react";
+import { ArrowRight, LayoutGrid, LogIn, LogOut, Plus, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { appUrl } from "./apps";
+import { appUrl, getApp, isAppId, type AppId } from "./apps";
+import { backTarget, loginUrl, useSession } from "./useSession";
 import { profileTitle, type ProfileRow, type SessionData } from "./profile";
 import { PlanEditor, planReady, planValue, type PlanValue } from "./PlanEditor";
 
@@ -27,11 +28,14 @@ export function Account() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<{ id: string; v: PlanValue } | null>(null);
 
-  const load = () =>
+  // veio de um app (?voltar=system-design): depois de entrar, volta para ele
+  const [back, setBack] = useState<{ app: AppId; url: string } | null>(null);
+  useEffect(() => setBack(backTarget(new URLSearchParams(window.location.search), isAppId)), []);
+  const load = (): Promise<ContaData> =>
     fetch("/api/conta")
       .then((r) => r.json())
-      .then(setData)
-      .catch(() => setData({ db: false, session: null, users: [] }));
+      .catch(() => ({ db: false, session: null, users: [] }))
+      .then((d: ContaData) => (setData(d), d));
   useEffect(() => {
     load();
   }, []);
@@ -41,8 +45,12 @@ export function Account() {
     const r = await fetch(url, init);
     const b = await r.json().catch(() => ({}));
     if (!r.ok) return setError(b.error ?? "Algo deu errado."), false;
-    await load();
+    const d = await load();
     window.dispatchEvent(new Event("conta-mudou"));
+    if (back && d.session && (!needsProfile(back.app) || d.session.profile)) {
+      window.location.href = back.url;
+      return true;
+    }
     router.refresh();
     return true;
   }
@@ -57,9 +65,11 @@ export function Account() {
     );
 
   const s = data.session;
+  const banner = back && <BackBanner app={back.app} url={back.url} session={s} />;
   if (!s)
     return (
       <div className="flex flex-col gap-5">
+        {banner}
         {data.users.length > 0 && (
           <div className="flex flex-col gap-2">
             <div className="hud-label">Entrar como</div>
@@ -93,6 +103,7 @@ export function Account() {
 
   return (
     <div className="flex flex-col gap-6">
+      {banner}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-lg">
           Olá, <span className="font-semibold text-ok">{s.user.name}</span>
@@ -165,6 +176,42 @@ export function Account() {
   );
 }
 
+/** Estudos e Hábito precisam de um perfil (a vaga que você treina); os outros apps abrem só com a conta. */
+const needsProfile = (app: AppId) => app === "estudos" || app === "habito";
+
+/** Aviso no topo da conta quando você veio de um app: para onde volta e o que falta. */
+function BackBanner({ app, url, session }: { app: AppId; url: string; session: SessionData | null }) {
+  const title = getApp(app).title;
+  const ready = session && (!needsProfile(app) || session.profile);
+  return (
+    <div className="panel flex flex-wrap items-center gap-3 !border-accent/60 p-4 text-sm">
+      <ArrowRight size={16} className="text-accent" />
+      <span className="flex-1">
+        {!session && (
+          <>
+            Entre ou crie a sua conta e você volta para o <span className="font-semibold text-accent">{title}</span>.
+          </>
+        )}
+        {session && !ready && (
+          <>
+            Falta criar um perfil (a vaga que você treina). Depois disso você volta para o <span className="font-semibold text-accent">{title}</span>.
+          </>
+        )}
+        {ready && (
+          <>
+            Tudo pronto. Pode voltar para o <span className="font-semibold text-accent">{title}</span>.
+          </>
+        )}
+      </span>
+      {ready && (
+        <a href={url} className="btn-neon px-4 py-2 text-xs">
+          Continuar para o {title} ▶
+        </a>
+      )}
+    </div>
+  );
+}
+
 function NewProfile({ taken, onCreate, onCancel }: { taken: ProfileRow[]; onCreate(v: { stack: string; level: Level } & PlanValue): void; onCancel(): void }) {
   const [area, setArea] = useState<AreaId>("backend");
   const [stack, setStack] = useState("java");
@@ -232,28 +279,30 @@ function NewProfile({ taken, onCreate, onCancel }: { taken: ProfileRow[]; onCrea
   );
 }
 
-/** No cabeçalho: quem está usando e o perfil ativo. */
-export function AccountChip() {
-  const [s, setS] = useState<SessionData | null | undefined>(undefined);
-  useEffect(() => {
-    const load = () =>
-      fetch("/api/conta")
-        .then((r) => r.json())
-        .then((d) => setS(d.session))
-        .catch(() => setS(null));
-    load();
-    window.addEventListener("conta-mudou", load);
-    return () => window.removeEventListener("conta-mudou", load);
-  }, []);
+/**
+ * No cabeçalho: sem conta, o botão "Entrar" (volta para este app depois do login);
+ * com conta, o atalho para o Painel com todos os apps e quem está usando.
+ */
+export function AccountChip({ current }: { current: AppId }) {
+  const s = useSession();
   if (s === undefined) return null;
+  if (!s)
+    return (
+      <a href={current === "painel" ? appUrl("painel", "/conta") : loginUrl(current)} className="btn-neon flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-1 text-xs">
+        <LogIn size={13} /> Entrar
+      </a>
+    );
   return (
-    <a href={appUrl("painel", "/conta")} title={s?.profile ? profileTitle(s.profile) : undefined} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-ok hover:text-ok">
-      <UserRound size={13} />
-      {s ? (
-        <span className="text-text">{s.user.name}</span>
-      ) : (
-        <span className="font-semibold uppercase tracking-[0.14em]">Entrar</span>
+    <div className="flex shrink-0 items-center gap-2">
+      {current !== "painel" && (
+        <a href={appUrl("painel")} title="Painel com todos os apps" className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1 text-xs font-semibold uppercase tracking-[0.1em] text-muted transition-colors hover:border-text hover:text-text">
+          <LayoutGrid size={13} /> <span className="hidden sm:inline">Meu painel</span>
+        </a>
       )}
-    </a>
+      <a href={appUrl("painel", "/conta")} title={s.profile ? profileTitle(s.profile) : undefined} className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-ok hover:text-ok">
+        <UserRound size={13} />
+        <span className="hidden max-w-32 truncate text-text sm:inline">{s.user.name}</span>
+      </a>
+    </div>
   );
 }

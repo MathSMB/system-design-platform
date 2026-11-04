@@ -56,7 +56,7 @@ export default function Home() {
 
       <SdIntro />
 
-      <h2 className="hud-label mt-10">Escolha como quer treinar hoje</h2>
+      <h2 id="comecar" className="hud-label mt-10 scroll-mt-20">Escolha como quer treinar hoje</h2>
       <div className="mt-3 grid gap-5 md:grid-cols-2">
         {MODES.map(({ href, title, Icon, tone, body, areas }) => (
           <div

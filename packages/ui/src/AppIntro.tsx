@@ -1,6 +1,8 @@
 "use client";
 
-import { ChevronDown, Maximize2, Pause, Play, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, LogIn, Maximize2, Pause, Play, type LucideIcon } from "lucide-react";
+import type { AppId } from "./apps";
+import { loginUrl, useSession } from "./useSession";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /** Classes fixas por cor (o Tailwind só gera classes que aparecem inteiras no código). */
@@ -21,6 +23,20 @@ export interface IntroPoint {
 export interface IntroStep {
   title: string;
   body: string;
+}
+
+/** Uma seção da página do produto: print da tela real, o problema e como o app resolve. */
+export interface IntroShowcase {
+  /** Caminho em /public, ex. "/demo/prints/simulacao.jpg". */
+  img: string;
+  alt: string;
+  /** Rótulo curto em cima do título (ex. "Simulação de carga"). */
+  tag: string;
+  title: string;
+  /** A dor que essa parte resolve, em uma ou duas frases. */
+  problem: string;
+  body: string;
+  bullets: string[];
 }
 
 export interface IntroFeature {
@@ -50,17 +66,26 @@ const KEY = (id: string) => `sdl:intro:${id}`;
  * numa linha (lembrado neste navegador) e abre de novo com um clique.
  */
 export function AppIntro({
+  app,
+  start,
+  openWithoutAccount = false,
   id,
   tone,
   name,
   headline,
   lead,
   points,
+  showcase,
   features,
   steps,
   video,
   cta,
 }: {
+  app: AppId;
+  /** O botão principal: onde começar a usar o app (ex. "/#comecar"). Sem conta, passa antes pelo login. */
+  start: { label: string; href: string };
+  /** O app funciona sem conta (mostra também "Testar sem conta"). */
+  openWithoutAccount?: boolean;
   /** Chave para lembrar se a pessoa já viu (ex. "habito"). */
   id: string;
   tone: IntroTone;
@@ -69,7 +94,9 @@ export function AppIntro({
   headline: ReactNode;
   lead: ReactNode;
   points: IntroPoint[];
-  /** Tudo o que o app faz, uma linha por funcionalidade. */
+  /** As funcionalidades principais, cada uma com print, problema e solução. */
+  showcase: IntroShowcase[];
+  /** O resto do que o app faz, numa grade curta no fim. */
   features: IntroFeature[];
   steps: IntroStep[];
   video: DemoVideo;
@@ -81,7 +108,16 @@ export function AppIntro({
     try {
       if (localStorage.getItem(KEY(id)) === "visto") setOpen(false);
     } catch {}
+    // voltou do login (ou clicou em começar): recolhe a apresentação e vai direto para o app
+    if (window.location.hash === "#comecar") goStart();
   }, [id]);
+  function goStart() {
+    setOpen(false);
+    try {
+      localStorage.setItem(KEY(id), "visto");
+    } catch {}
+    requestAnimationFrame(() => document.getElementById("comecar")?.scrollIntoView({ block: "start" }));
+  }
   const close = () => {
     setOpen(false);
     try {
@@ -95,15 +131,19 @@ export function AppIntro({
     } catch {}
   };
 
+  const startBtn = <StartButtons app={app} start={start} tone={tone} openWithoutAccount={openWithoutAccount} onStart={start.href.endsWith("#comecar") ? goStart : undefined} />;
   if (!open)
     return (
-      <button onClick={reopen} className={`panel group mt-6 flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${t.hover}`}>
-        <Play size={14} className={t.text} />
-        <span className="text-muted group-hover:text-text">
-          Como funciona {name}? <span className={t.text}>Ver a apresentação</span>
-        </span>
-        <ChevronDown size={14} className="ml-auto text-muted" />
-      </button>
+      <div className={`panel mt-6 flex flex-wrap items-center gap-3 px-4 py-3 text-sm transition-colors ${t.hover}`}>
+        <button onClick={reopen} className="group flex min-w-0 flex-1 items-center gap-3 text-left">
+          <Play size={14} className={t.text} />
+          <span className="text-muted group-hover:text-text">
+            Como funciona {name}? <span className={t.text}>Ver a apresentação</span>
+          </span>
+          <ChevronDown size={14} className="text-muted" />
+        </button>
+        {startBtn}
+      </div>
     );
 
   return (
@@ -123,26 +163,33 @@ export function AppIntro({
               </li>
             ))}
           </ul>
+          <div className="mt-1">{startBtn}</div>
         </div>
         <DemoPlayer tone={tone} video={video} />
       </div>
 
-      <div className="border-t border-border p-5 sm:p-6">
-        <div className={`hud-label ${t.text}`}>// funcionalidades</div>
-        <ul className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map(({ Icon, title, body }) => (
-            <li key={title} className="flex gap-3">
-              <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${t.border} bg-bg/60`}>
-                <Icon size={16} className={t.text} />
-              </span>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold">{title}</span>
-                <span className="text-[13px] leading-relaxed text-muted">{body}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {showcase.map((x, i) => (
+        <Showcase key={x.title} x={x} i={i} tone={tone} />
+      ))}
+
+      {features.length > 0 && (
+        <div className="border-t border-border p-5 sm:p-8">
+          <div className={`hud-label ${t.text}`}>// e também</div>
+          <ul className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map(({ Icon, title, body }) => (
+              <li key={title} className="flex gap-3">
+                <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${t.border} bg-bg/60`}>
+                  <Icon size={16} className={t.text} />
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold">{title}</span>
+                  <span className="text-[13px] leading-relaxed text-muted">{body}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="border-t border-border bg-panel-2/40 p-5 sm:p-6">
         <div className={`hud-label ${t.text}`}>// como funciona</div>
@@ -156,6 +203,7 @@ export function AppIntro({
           ))}
         </ol>
         <div className="mt-5 flex flex-wrap items-center gap-3">
+          {startBtn}
           {cta}
           <button onClick={close} className="btn-ghost px-4 py-2 text-xs font-semibold uppercase tracking-wider">
             Entendi, esconder
@@ -163,6 +211,69 @@ export function AppIntro({
         </div>
       </div>
     </section>
+  );
+}
+
+/** Uma seção da página do produto: print de um lado, texto do outro, alternando. */
+function Showcase({ x, i, tone }: { x: IntroShowcase; i: number; tone: IntroTone }) {
+  const t = TONE[tone];
+  const flip = i % 2 === 1;
+  return (
+    <div className="border-t border-border p-5 sm:p-8">
+      <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-10">
+        <a href={x.img} target="_blank" rel="noreferrer" title="Abrir o print em tamanho real" className={`group block overflow-hidden rounded-[10px] border ${t.border} bg-bg ${t.glow} ${flip ? "lg:order-2" : ""}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={x.img} alt={x.alt} loading="lazy" decoding="async" className="block w-full transition-transform duration-500 group-hover:scale-[1.015]" />
+        </a>
+        <div className={`flex flex-col gap-3 ${flip ? "lg:order-1" : ""}`}>
+          <div className={`font-mono text-[11px] uppercase tracking-[0.18em] ${t.text}`}>
+            {String(i + 1).padStart(2, "0")} · {x.tag}
+          </div>
+          <h3 className="font-display text-sm leading-relaxed sm:text-base">{x.title}</h3>
+          <p className={`rounded-md border-l-2 ${t.border} bg-bg/50 px-3 py-2 text-[13px] leading-relaxed text-muted`}>
+            <span className="font-semibold text-text">O problema: </span>
+            {x.problem}
+          </p>
+          <p className="text-[15px] leading-relaxed text-muted">{x.body}</p>
+          <ul className="flex flex-col gap-1.5">
+            {x.bullets.map((b) => (
+              <li key={b} className="flex gap-2 text-sm">
+                <Check size={15} className={`mt-0.5 shrink-0 ${t.text}`} />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * "Começar": com conta vai direto para o app; sem conta, passa pelo login do Painel
+ * e volta para cá. Apps que funcionam sem conta também oferecem "Testar sem conta".
+ */
+function StartButtons({ app, start, tone, openWithoutAccount, onStart }: { app: AppId; start: { label: string; href: string }; tone: IntroTone; openWithoutAccount: boolean; onStart?: () => void }) {
+  const s = useSession();
+  const t = TONE[tone];
+  if (s === undefined) return <div className="h-9" />;
+  if (s)
+    return (
+      <a href={start.href} onClick={onStart} className="btn-neon inline-flex items-center gap-2 px-5 py-2.5 text-xs">
+        {start.label} ▶
+      </a>
+    );
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <a href={loginUrl(app, start.href)} className="btn-neon inline-flex items-center gap-2 px-5 py-2.5 text-xs">
+        <LogIn size={14} /> Entrar e começar ▶
+      </a>
+      {openWithoutAccount && (
+        <a href={start.href} onClick={onStart} className={`text-[13px] text-muted underline-offset-4 hover:underline ${t.hover}`}>
+          ou testar sem conta
+        </a>
+      )}
+    </div>
   );
 }
 

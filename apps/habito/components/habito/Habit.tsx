@@ -60,6 +60,7 @@ export function Habit() {
         Cada dia de meta cumprida instala uma peça na placa-mãe. Dia perdido gasta um failover da semana; sem failover, a máquina se desgasta. O próximo dia cumprido conserta um nível de desgaste. Se o desgaste chegar ao fim, a máquina queima e a montagem recomeça do zero.
       </p>
       <HabitIntro />
+      <div id="comecar" className="scroll-mt-20" />
 
       {!data && <p className="mt-8 text-muted">Carregando…</p>}
       {data && !data.db && (

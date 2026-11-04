@@ -100,6 +100,7 @@ export function Study() {
         A IA pesquisa as vagas do cargo que você busca, mostra o que mais pedem, sugere projetos e monta o seu cronograma em blocos curtos, com revisão espaçada. Você junta a pós, a certificação e o livro que está lendo, conversando com ela.
       </p>
       <StudyIntro />
+      <div id="comecar" className="scroll-mt-20" />
 
       {!data && <p className="mt-8 text-muted">Carregando…</p>}
       {data && !data.db && <div className="panel mt-8 p-4 text-sm text-muted">O banco não abriu. Reinicie o <code className="text-text">pnpm dev</code> e veja o terminal.</div>}

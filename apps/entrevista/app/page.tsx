@@ -58,7 +58,7 @@ export default function Entrevista() {
       </h1>
       <p className="mt-3 max-w-2xl text-muted">Treine a entrevista inteira ou só a parte técnica da sua stack. A IA avalia cada resposta e, no fim, dá um feedback geral.</p>
       <EntrevistaIntro />
-      <h2 className="hud-label mt-10 !text-bad">Escolha o treino</h2>
+      <h2 id="comecar" className="hud-label mt-10 scroll-mt-20 !text-bad">Escolha o treino</h2>
       <div className="mt-3 grid gap-4 md:grid-cols-3">
         {CARDS.map(({ href, title, body, count, Icon, tone }) => (
           <Link key={href} href={href} className={`panel group flex flex-col gap-3 p-6 transition-shadow ${TONE[tone].hover}`}>

@@ -19,3 +19,5 @@ export const getApp = (id: AppId): AppInfo => APP_LIST.find((a) => a.id === id)!
 export function appUrl(id: AppId, path = "/"): string {
   return `http://localhost:${getApp(id).port}${path}`;
 }
+
+export const isAppId = (id: string): id is AppId => APP_LIST.some((a) => a.id === id);

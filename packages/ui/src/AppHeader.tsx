@@ -52,7 +52,7 @@ export function AppHeader({ current, nav = [], extra }: { current: AppId; nav?: 
             ),
           )}
         </nav>
-        <AccountChip />
+        <AccountChip current={current} />
         {extra}
       </div>
       {nav.length > 0 && (
