@@ -1,69 +1,8 @@
 "use client";
 
 import { AppIntro } from "@sdp/ui";
-import { Database, Flame, FlaskConical, Gauge, Server, Trophy, Users, Zap, type LucideIcon } from "lucide-react";
-
-/** Um bloquinho do canvas na demonstração. */
-function Node({ Icon, label, tone, show = true, hot = false }: { Icon: LucideIcon; label: string; tone: string; show?: boolean; hot?: boolean }) {
-  return (
-    <div className={`flex flex-col items-center gap-1 transition-all duration-500 ${show ? "scale-100 opacity-100" : "scale-75 opacity-0"}`}>
-      <div className="relative">
-        {hot && <Flame size={14} className="absolute -top-4 left-1/2 -translate-x-1/2 animate-pulse text-bad" />}
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-lg border-2 bg-panel transition-colors duration-500 ${hot ? "border-down text-down" : ""}`}
-          style={hot ? { boxShadow: "0 0 14px var(--down)" } : { borderColor: `var(--${tone})`, color: `var(--${tone})`, boxShadow: `0 0 10px color-mix(in srgb, var(--${tone}) 40%, transparent)` }}
-        >
-          <Icon size={18} />
-        </div>
-      </div>
-      <span className="font-mono text-[9px] uppercase tracking-wider text-muted">{label}</span>
-    </div>
-  );
-}
-
-const Arrow = ({ show = true, bad = false }: { show?: boolean; bad?: boolean }) => (
-  <span className={`mb-4 font-mono text-xs transition-opacity duration-500 ${show ? "opacity-100" : "opacity-0"} ${bad ? "text-down" : "text-accent"}`}>➤</span>
-);
-
-function Demo({ f }: { f: number }) {
-  const ran = f >= 1;
-  const cache = f >= 2;
-  const fixed = f >= 3;
-  const hot = ran && !fixed;
-  return (
-    <div className="flex h-full flex-col justify-center gap-6">
-      <div className="flex items-end justify-center gap-3 pt-4">
-        <Node Icon={Users} label="usuários" tone="text" />
-        <Arrow />
-        <Node Icon={Server} label="app" tone="ok" />
-        <Arrow />
-        <Node Icon={Zap} label="cache" tone="accent-2" show={cache} />
-        <Arrow show={cache} />
-        <Node Icon={Database} label="banco" tone="bad" hot={hot} />
-      </div>
-      <div className="grid grid-cols-3 gap-2 font-mono text-[11px]">
-        {[
-          ["req/s", ran ? "5.000" : "—", false],
-          ["p99", !ran ? "—" : fixed ? "80 ms" : "2,4 s", hot],
-          ["erros", !ran ? "—" : fixed ? "0%" : "31%", hot],
-        ].map(([k, v, bad]) => (
-          <div key={k as string} className={`rounded-md border px-2 py-1.5 transition-colors duration-500 ${bad ? "pulse-bad border-down text-down" : fixed && v !== "—" ? "border-ok/60 text-ok" : "border-border text-text"}`}>
-            <div className="text-[9px] uppercase text-muted">{k}</div>
-            <div className="text-sm">{v}</div>
-          </div>
-        ))}
-      </div>
-      {fixed && (
-        <div className="pop-in flex items-center gap-1 self-center text-warn">
-          {[0, 1, 2].map((i) => (
-            <Trophy key={i} size={14} />
-          ))}
-          <span className="ml-1 text-[11px] text-muted">cumpriu o SLO</span>
-        </div>
-      )}
-    </div>
-  );
-}
+import { BookOpen, Bot, Boxes, Bug, FlaskConical, Gauge, Keyboard, LibraryBig, Lock, Swords, Trophy } from "lucide-react";
+import { DEMO_CUES } from "../demo-cues";
 
 export function SdIntro() {
   return (
@@ -82,19 +21,24 @@ export function SdIntro() {
         { Icon: FlaskConical, title: "Concorrência que dá para ver", body: "Duas transações passo a passo, com locks e intercalações. O ingresso vendido duas vezes acontece na sua frente." },
         { Icon: Trophy, title: "No ritmo da entrevista", body: "Requisitos, estimativa, desenho e aprofundamento. A IA avalia como dois entrevistadores e dá nota em estrelas." },
       ]}
+      features={[
+        { Icon: Boxes, title: "Canvas com 8 componentes", body: "Usuários, load balancer, servidor, cache, CDN, banco com réplicas, fila e serviço externo. Cada um com workers, tempo, fila, hit rate e retries ajustáveis." },
+        { Icon: Gauge, title: "Simulação de carga", body: "Aplica o DAU e o pico do enunciado e mostra req/s, p99, erros, o gargalo e a utilização de cada componente. Dá para derrubar um nó e ver a cascata." },
+        { Icon: BookOpen, title: "Modo Estudo com mentor", body: "Aulas guiadas: o mentor conta a história, pede um clique de cada vez e explica o resultado, com perguntas que já vêm explicadas." },
+        { Icon: Swords, title: "Modo Entrevista técnica", body: "9 problemas (Black Friday, placar da Copa, feed, ingressos, pagamentos, encurtador, streaming, Drive…), sem dica, com relógio e nota em 5 estrelas." },
+        { Icon: Lock, title: "Laboratório de concorrência", body: "11 aulas: lost update, lock pessimista e otimista, write skew, deadlock, cache velho, mensagem duplicada, Pix duplo e o caso Therac-25." },
+        { Icon: Bug, title: "Entrevista de bugs de produção", body: "8 relatos reais: você diagnostica, escolhe a correção e prova no laboratório testando todas as ordens possíveis." },
+        { Icon: Bot, title: "Avaliação pela IA", body: "Dois entrevistadores avaliam o desenho e as suas explicações, com nota, pontos fortes, o que faltou e as perguntas que viriam a seguir." },
+        { Icon: LibraryBig, title: "Glossário e bibliografia", body: "Cada termo tem um \"?\" que abre a explicação em linguagem simples, com livros e artigos para aprofundar." },
+        { Icon: Keyboard, title: "Feito para mexer rápido", body: "Desfazer, copiar e colar com conexões, duplicar, seleção em retângulo e Ctrl+Enter para simular." },
+      ]}
       steps={[
         { title: "Escolha o modo", body: "Estudo tem mentor e dicas. Entrevista técnica é sem ajuda, como no dia." },
         { title: "Desenhe no canvas", body: "Arraste usuários, load balancer, servidores, cache, filas e banco, e conecte." },
         { title: "Simule e veja quebrar", body: "Aplique a carga do enunciado ou derrube um componente e veja o efeito em cascata." },
         { title: "Corrija e explique", body: "Ajuste até cumprir o SLO e receba o feedback com o que dizer na entrevista." },
       ]}
-      captions={[
-        "Você desenha: usuários, app e banco.",
-        "Simula 5.000 req/s: o banco não aguenta e o p99 vai a 2,4 s.",
-        "Você coloca um cache na frente do banco.",
-        "Simula de novo: p99 de 80 ms e zero erros. Agora é explicar o porquê.",
-      ]}
-      demo={(f) => <Demo f={f} />}
+      video={{ src: "/demo/system-design.mp4", poster: "/demo/system-design.jpg", cues: DEMO_CUES }}
     />
   );
 }

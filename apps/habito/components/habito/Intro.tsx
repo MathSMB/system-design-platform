@@ -1,68 +1,8 @@
 "use client";
 
 import { AppIntro } from "@sdp/ui";
-import { Cpu, Fan, HardDrive, MemoryStick, ShieldCheck, Sparkles, Wrench, Zap } from "lucide-react";
-
-const DAYS = ["seg", "ter", "qua", "qui", "sex"];
-/** Por quadro: resultado de cada dia até ali (true = cumpriu, false = perdeu). */
-const RESULTS = [[false], [false, true], [false, true, false], [false, true, false, false], [false, true, false, false, true]];
-const PARTS = [
-  { Icon: Cpu, label: "CPU" },
-  { Icon: MemoryStick, label: "RAM" },
-  { Icon: HardDrive, label: "SSD" },
-  { Icon: Fan, label: "FAN" },
-  { Icon: Zap, label: "PSU" },
-  { Icon: Sparkles, label: "RGB" },
-];
-
-function Demo({ f }: { f: number }) {
-  const days = RESULTS[f]!;
-  const installed = f >= 1 ? 1 : 0;
-  const worn = f === 3;
-  const failovers = f >= 2 ? 0 : 1;
-  return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center gap-1.5">
-        {DAYS.map((d, i) => {
-          const r = days[i];
-          return (
-            <div key={d} className={`flex flex-1 flex-col items-center rounded-md border py-1 font-mono text-[10px] transition-colors ${r === undefined ? "border-border text-muted" : r ? "border-ok/60 text-ok" : "border-down/60 text-down"}`}>
-              <span className="uppercase">{d}</span>
-              <span>{r === undefined ? "·" : r ? "✓" : "✗"}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div
-        className={`relative grid flex-1 grid-cols-3 gap-2 rounded-lg border-2 p-3 transition-all duration-500 ${worn ? "border-warn/60 bg-[#1a1608]" : "border-[#2a3a6a] bg-[#0a1230]"}`}
-        style={{ backgroundImage: "linear-gradient(90deg, rgba(57,255,143,0.06) 1px, transparent 1px), linear-gradient(rgba(57,255,143,0.06) 1px, transparent 1px)", backgroundSize: "14px 14px" }}
-      >
-        {PARTS.map(({ Icon, label }, i) => {
-          const on = i < installed;
-          return (
-            <div
-              key={label}
-              className={`flex flex-col items-center justify-center gap-0.5 rounded-md border transition-all duration-500 ${on ? "border-ok text-ok" : "border-dashed border-[#2a3a6a] text-[#2a3a6a]"} ${on && i === installed - 1 ? "pop-in" : ""}`}
-              style={on ? { boxShadow: "0 0 10px rgba(57,255,143,0.35)" } : undefined}
-            >
-              <Icon size={16} className={on && label === "FAN" ? "animate-spin" : ""} />
-              <span className="font-mono text-[8px]">{label}</span>
-            </div>
-          );
-        })}
-        {worn && <div className="pop-in absolute inset-x-3 bottom-2 rounded bg-warn/15 px-2 py-0.5 text-center font-mono text-[10px] text-warn">desgaste 1/6: poeira</div>}
-      </div>
-      <div className="flex items-center justify-between font-mono text-[11px]">
-        <span className="flex items-center gap-1 text-warn">
-          <ShieldCheck size={12} /> failovers: {failovers} de 2
-        </span>
-        <span className="flex items-center gap-1 text-muted">
-          <Wrench size={12} /> peças: {installed} de 15
-        </span>
-      </div>
-    </div>
-  );
-}
+import { CalendarDays, Cpu, Flame, ListChecks, Repeat, ShieldCheck, Sparkles, Wrench, Zap } from "lucide-react";
+import { DEMO_CUES } from "../demo-cues";
 
 export function HabitIntro() {
   return (
@@ -81,20 +21,24 @@ export function HabitIntro() {
         { Icon: ShieldCheck, title: "Tropeçar não zera", body: "2 failovers por semana. Sem eles, a máquina se desgasta, e o próximo dia cumprido conserta um nível." },
         { Icon: Zap, title: "Conta sozinho", body: "Respostas avaliadas, etapas do processo seletivo, desenhos de system design e os blocos da Central de estudos entram na meta sem você marcar." },
       ]}
+      features={[
+        { Icon: Cpu, title: "Placa-mãe neon com 15 peças", body: "Processador, memória DDR5, SSD Gen5, water cooler, VRM, placa de vídeo… até a iluminação RGB. Cada dia cumprido instala a próxima, com animação de encaixe e trilhas que acendem." },
+        { Icon: Sparkles, title: "Overclock", body: "Com a placa completa, cada dia cumprido vira um ponto de overclock e as ventoinhas giram mais rápido." },
+        { Icon: ShieldCheck, title: "Failover", body: "2 por semana: um dia perdido gasta um failover e não desgasta nada. Tropeçar uma vez não estraga a semana." },
+        { Icon: Wrench, title: "Desgaste e conserto", body: "Sem failover, 6 níveis de desgaste: poeira, engasgo, superaquecimento, ventoinha parada, curto e vazamento. Cada dia cumprido conserta um." },
+        { Icon: Flame, title: "Queima e recomeço", body: "No 6º nível a máquina queima com fogo no VRM, as peças saem e a montagem recomeça. A marca de queimado fica na placa." },
+        { Icon: ListChecks, title: "Meta do dia do seu jeito", body: "Modelos prontos (leve, regular, intensa) ou itens seus: estudo livre que você marca, respostas, etapas, desenhos e o cronograma do dia." },
+        { Icon: Zap, title: "Conta sozinho", body: "O que você faz no System Design, na Entrevista e nos Estudos chega pela API de eventos e marca a meta automaticamente." },
+        { Icon: CalendarDays, title: "Calendário do último ano", body: "Cada dia com a cor do que aconteceu: peça instalada, conserto, failover, desgaste, overclock ou queima." },
+        { Icon: Repeat, title: "Trocar a meta não reescreve o passado", body: "Cada dia é julgado com a meta que valia nele. A meta nova vale a partir de hoje." },
+      ]}
       steps={[
         { title: "Crie o perfil", body: "No Painel: a vaga que você treina e a meta do dia." },
         { title: "Treine nos outros apps", body: "O que conta para a meta é marcado sozinho; o seu estudo livre você marca aqui." },
         { title: "Abra a placa-mãe", body: "A tela anima o que mudou desde a última visita: peça nova, conserto ou desgaste." },
         { title: "Não deixe queimar", body: "No 6º nível de desgaste a máquina queima e a montagem recomeça do zero." },
       ]}
-      captions={[
-        "Segunda perdida: um failover da semana segura, nada quebra.",
-        "Terça cumprida: o processador é instalado.",
-        "Quarta perdida: vai o segundo failover. Ainda nada quebra.",
-        "Quinta perdida sem failover: a máquina pega poeira (desgaste 1).",
-        "Sexta cumprida: conserta o desgaste. A próxima peça vem no dia seguinte.",
-      ]}
-      demo={(f) => <Demo f={f} />}
+      video={{ src: "/demo/habito.mp4", poster: "/demo/habito.jpg", cues: DEMO_CUES }}
     />
   );
 }
