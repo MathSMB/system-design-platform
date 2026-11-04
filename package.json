@@ -3,11 +3,22 @@
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "dev": "turbo run dev --filter=web",
+    "dev": "node scripts/preparar.mjs && turbo run dev --filter=./apps/*",
+    "dev:painel": "node scripts/preparar.mjs && turbo run dev --filter=painel",
+    "dev:system-design": "node scripts/preparar.mjs && turbo run dev --filter=system-design",
+    "dev:entrevista": "node scripts/preparar.mjs && turbo run dev --filter=entrevista",
+    "dev:estudos": "node scripts/preparar.mjs && turbo run dev --filter=estudos",
+    "dev:habito": "node scripts/preparar.mjs && turbo run dev --filter=habito",
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "check": "turbo run typecheck test"
+    "check": "turbo run typecheck test",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose stop db",
+    "db:migrate": "node packages/db/scripts/migrate.mjs",
+    "db:generate": "pnpm --filter @sdp/db generate",
+    "db:studio": "pnpm --filter @sdp/db studio",
+    "db:importar-pglite": "node packages/db/scripts/importar-pglite.mjs"
   },
   "devDependencies": {
     "turbo": "2.5.8",

@@ -1,0 +1,30 @@
+{
+  "name": "@sdp/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'sem testes (o banco é testado rodando os apps)'",
+    "migrate": "node scripts/migrate.mjs",
+    "generate": "drizzle-kit generate",
+    "studio": "drizzle-kit studio",
+    "importar-pglite": "node scripts/importar-pglite.mjs"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.4",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "@types/node": "22.18.0",
+    "drizzle-kit": "0.31.11",
+    "typescript": "5.9.3"
+  }
+}

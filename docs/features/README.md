@@ -9,6 +9,8 @@ Esta pasta descreve as quatro features da plataforma com detalhe suficiente para
 | 3 | Central de estudos (`/estudos`) | [03-central-de-estudos.md](03-central-de-estudos.md) | só no PR #6 |
 | 4 | Hábito com a placa-mãe neon (`/habito`, `/conta`) | [04-habito-placa-mae.md](04-habito-placa-mae.md) | só no PR #6 |
 
+Depois da separação em apps, o código de cada feature fica em `apps/system-design` (1), `apps/entrevista` (2), `apps/estudos` (3) e `apps/habito` + `apps/painel` (4); o que é comum fica em `packages/` (tema e cabeçalho em `packages/ui`, banco em `packages/db`, login em `packages/auth`, eventos em `packages/events`).
+
 Referência de código usada para escrever estes documentos: branch `claude/project-thread-sdljix`, commit `f8213fe` (main + PR #6). Os arquivos mais difíceis de descrever em texto (tema CSS, nó do canvas, placa-mãe em SVG, regras do hábito) estão copiados, sem alteração, em [`anexos/`](anexos/). Eles são a fonte de verdade do visual: se o texto e o anexo divergirem, vale o anexo.
 
 Prints de tela ficam em [`img/`](img/). A base técnica de system design (conceitos, cenários, referências) continua em [`../base-tecnica.md`](../base-tecnica.md).

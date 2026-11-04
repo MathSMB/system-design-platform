@@ -1,0 +1,38 @@
+{
+  "name": "@sdp/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./token": "./src/token.ts",
+    "./routes/conta": "./src/routes/conta.ts",
+    "./routes/perfis": "./src/routes/perfis.ts",
+    "./routes/eventos": "./src/routes/eventos.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sdp/db": "workspace:*",
+    "@sdp/events": "workspace:*",
+    "@sdp/habit": "workspace:*",
+    "@sdp/hiring": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "jose": "6.1.0"
+  },
+  "peerDependencies": {
+    "next": "16.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.0",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

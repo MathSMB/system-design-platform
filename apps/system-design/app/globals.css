@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+@import "uplot/dist/uPlot.min.css";
+@import "@sdp/ui/theme.css";
+
+/* o Tailwind também precisa ver as classes usadas nos componentes compartilhados */
+@source "../../../packages/ui/src";

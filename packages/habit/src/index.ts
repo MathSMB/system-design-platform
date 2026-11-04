@@ -22,11 +22,12 @@ export interface DayCounts {
 export const EMPTY: DayCounts = { answers: 0, stages: 0, processes: 0, designs: 0 };
 
 export type Metric = keyof DayCounts;
-export const METRICS: { id: Metric; one: string; many: string; href: string }[] = [
-  { id: "answers", one: "resposta avaliada pela IA", many: "respostas avaliadas pela IA", href: "/entrevista/java" },
-  { id: "stages", one: "etapa do processo seletivo", many: "etapas do processo seletivo", href: "/processo-seletivo" },
-  { id: "processes", one: "processo seletivo inteiro", many: "processos seletivos inteiros", href: "/processo-seletivo" },
-  { id: "designs", one: "caso de system design avaliado", many: "casos de system design avaliados", href: "/entrevista/system-design" },
+/** `app` + `href`: onde fazer (cada app tem a sua porta; quem mostra o link monta o endereço). */
+export const METRICS: { id: Metric; one: string; many: string; app: "entrevista" | "system-design"; href: string }[] = [
+  { id: "answers", one: "resposta avaliada pela IA", many: "respostas avaliadas pela IA", app: "entrevista", href: "/java" },
+  { id: "stages", one: "etapa do processo seletivo", many: "etapas do processo seletivo", app: "entrevista", href: "/processo-seletivo" },
+  { id: "processes", one: "processo seletivo inteiro", many: "processos seletivos inteiros", app: "entrevista", href: "/processo-seletivo" },
+  { id: "designs", one: "caso de system design avaliado", many: "casos de system design avaliados", app: "system-design", href: "/entrevista/system-design" },
 ];
 export const isMetric = (x: unknown): x is Metric => METRICS.some((m) => m.id === x);
 
