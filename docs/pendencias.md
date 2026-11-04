@@ -41,6 +41,10 @@ Prioridade citada pelo Matheus: Java Júnior e Sênior, Full stack Python e DevO
 
 - Renovar as pesquisas prontas (Java, Python e React, DevOps · Pleno) em mai/2027.
 - Treino avulso em Entrevista técnica para Full stack Python e DevOps (hoje só Java Pleno tem a página de blocos; as perguntas já existem no pacote `hiring`).
-- Habit tracker com contas de usuário (cada perfil com o seu); fazer análise e proposta antes de implementar.
+- Habit tracker, fases 1 e 2 prontas (nov/2026): contas com entrada de um clique, perfis, meta do seu jeito (itens que você marca + automáticos, com um padrão sugerido), ofensiva com failover e a placa-mãe que monta, se desgasta, é consertada e recomeça se queimar. Proposta: https://claude.ai/artifact/JYRg1yEgxVYe1aREvvUEPo
+- Login de verdade com Google e GitHub (Auth.js), no lugar da entrada de um clique sem senha. Necessário antes de publicar o site.
+- Habit tracker, fase 3: lembretes por e-mail ou notificação no celular (depois do deploy), efeitos novos no overclock (clock subindo, RGB novo a cada marco, adesivos de troféu), o dano cair na peça do seu tema mais fraco e meta em dobro consertando 2 níveis.
+- ~~Plano de estudos com check de progresso~~: feito como Central de estudos (`/estudos`): pesquisa da vaga com IA e busca na web, gráfico de habilidades, "pronto para a vaga", trilhas (pós, certificação, livro, curso, projeto) montadas conversando com a IA, 3 projetos sugeridos e cronograma em blocos curtos com revisão espaçada e replanejamento, ligado à meta do dia.
+- Central de estudos, próximos passos: lembrete do replanejamento de domingo (junto com os lembretes do hábito), importar as pesquisas prontas de Java, Python+React e DevOps como pesquisa da vaga, ligar a nota de cada pergunta das entrevistas a uma habilidade da pesquisa.
 - Publicar o site na Vercel (Root Directory `apps/web`); a IA publicada precisa de `AI_PROVIDER=api`.
 - System Design, próximos casos: rate limiter, pagamentos, sharding, autoscaling e pool de conexões bloqueante.

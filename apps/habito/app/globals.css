@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "@sdp/ui/theme.css";
+
+/* o Tailwind também precisa ver as classes usadas nos componentes compartilhados */
+@source "../../../packages/ui/src";

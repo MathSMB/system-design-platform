@@ -1,0 +1,38 @@
+{
+  "name": "@sdp/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./apps": "./src/apps.ts",
+    "./fonts": "./src/fonts.ts",
+    "./theme.css": "./src/theme.css"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo 'sem testes (componentes visuais)'"
+  },
+  "dependencies": {
+    "@fontsource/chakra-petch": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/press-start-2p": "5.3.0",
+    "@sdp/habit": "workspace:*",
+    "@sdp/hiring": "workspace:*",
+    "lucide-react": "1.55.0"
+  },
+  "peerDependencies": {
+    "next": "16.4.3",
+    "react": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "5.9.3"
+  }
+}
