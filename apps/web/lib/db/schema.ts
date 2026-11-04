@@ -1,4 +1,4 @@
-import { bigserial, index, jsonb, pgTable, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigserial, index, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /** Um desenho salvo: o grafo (com posições no canvas) em JSON. */
 export const designs = pgTable("designs", {
@@ -74,8 +74,12 @@ export const profiles = pgTable("profiles", {
   userId: uuid("user_id").notNull(),
   stack: text("stack").notNull(),
   level: text("level").notNull(),
-  /** "leve" | "regular" | "intensa" */
+  /** Modelo da meta: "sugerida" | "leve" | "regular" | "intensa" | "personalizada". */
   goal: text("goal").notNull(),
+  /** Itens da meta diária ({ mode, items }); vazio = o plano do modelo. */
+  plan: jsonb("plan"),
+  /** Metas anteriores ([{ until, plan }]): trocar a meta não muda o passado. */
+  planHistory: jsonb("plan_history"),
   /** Primeiro dia do rack (AAAA-MM-DD, horário de Brasília). */
   startDay: text("start_day").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -96,6 +100,19 @@ export const activities = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("activities_once").on(t.profileId, t.kind, t.ref), index("activities_day").on(t.profileId, t.day)],
+);
+
+/** Itens manuais da meta marcados como feitos em um dia (o seu tipo de estudo). */
+export const checkins = pgTable(
+  "checkins",
+  {
+    profileId: uuid("profile_id").notNull(),
+    /** Dia em Brasília (AAAA-MM-DD). */
+    day: text("day").notNull(),
+    itemId: text("item_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.profileId, t.day, t.itemId] })],
 );
 
 export type User = typeof users.$inferSelect;

@@ -20,10 +20,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className="min-h-screen antialiased">
-        <header className="relative flex h-12 items-center gap-6 border-b border-border bg-bg/80 px-4 backdrop-blur">
-          <Link href="/" className="flex items-center gap-2 font-display text-[11px] text-accent glow">
+        <header className="relative flex h-12 items-center gap-3 border-b border-border bg-bg/80 px-4 backdrop-blur">
+          <Link href="/" className="flex shrink-0 items-center gap-2 font-display text-[11px] text-accent glow">
             <span className="text-accent-2">&gt;</span>
-            SYSTEM_DESIGN_LAB
+            <span className="hidden sm:inline">SYSTEM_DESIGN_LAB</span>
+            <span className="sm:hidden">SDL</span>
             <span className="cursor-blink">_</span>
           </Link>
           <nav className="no-scrollbar flex min-w-0 flex-1 gap-4 overflow-x-auto whitespace-nowrap text-xs font-semibold uppercase tracking-[0.1em] text-muted">
@@ -39,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </nav>
           <AccountChip />
           <GlossaryButton className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-accent">
-            <span className="font-semibold uppercase tracking-[0.14em]">Saber mais</span>
+            <span className="font-semibold uppercase tracking-[0.14em]"><span className="sm:hidden">?</span><span className="hidden sm:inline">Saber mais</span></span>
           </GlossaryButton>
           {/* linha neon sob o cabeçalho */}
           <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px bg-[linear-gradient(90deg,transparent,var(--accent)_30%,var(--accent-2)_70%,transparent)] opacity-60" />

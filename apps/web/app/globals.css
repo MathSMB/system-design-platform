@@ -456,23 +456,158 @@ input[type="checkbox"] {
   .slide-in { animation: none; }
 }
 
-/* hábito: LED piscando nos servidores no ar e o servidor de hoje/em risco pulsando */
-.rack-led {
-  animation: rack-led 1.4s steps(2, jump-none) infinite;
-}
-@keyframes rack-led {
-  50% {
-    opacity: 0.25;
-  }
-}
-.rack-blink {
-  animation: rack-blink 1.6s ease-in-out infinite;
-}
-@keyframes rack-blink {
-  50% {
-    opacity: 0.35;
-  }
-}
 .no-scrollbar {
   scrollbar-width: none;
 }
+/* ---------- Hábito: placa-mãe (escopo .mobo) ---------- */
+/* ---------- placa ---------- */
+.mobo svg { --lit: #3fe0ff; --pink: #ff4dd8; --green: #39ff8f; --gold: #ffd24d; --violet: #b78cff; }
+.mobo .pcb { fill: url(#pcbGrad); stroke: #22396e; stroke-width: 2; }
+.mobo .layer-line { fill: none; stroke: #13244a; stroke-width: 1; }
+.mobo .dot { fill: #1b2d58; }
+.mobo .silk { fill: #5f79b8; font: 600 8px var(--font-sans); letter-spacing: .08em; }
+.mobo .silk.s { font-size: 6.5px; }
+.mobo .slot { fill: none; stroke: #5f79b8; stroke-width: .9; stroke-dasharray: 4 4; opacity: .4; transition: opacity .4s; }
+.mobo .slot.gone { opacity: 0; }
+.mobo .trace { fill: none; stroke: #1a3264; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mobo .flow { fill: none; stroke: var(--lit); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 3 11; opacity: 0; transition: opacity .6s; filter: drop-shadow(0 0 3px var(--lit)); animation: mb-flow 1.3s linear infinite; }
+.mobo .flow.lit { opacity: 1; }
+.mobo .chip { fill: #0e1730; stroke: var(--lit); stroke-width: 1.1; }
+.mobo .chip.dim { stroke: #2c4a86; }
+.mobo .metal { fill: url(#metalGrad); stroke: #3fe0ff; stroke-width: 1; }
+.mobo .plate { fill: #0b1226; stroke: #2c4a86; stroke-width: 1; }
+.mobo .fin { stroke: #2f5aa3; stroke-width: 1.3; }
+.mobo .fin.lit { stroke: #3fe0ff; opacity: .55; }
+.mobo .smd { fill: #31406a; }
+.mobo .cap { fill: #1a2442; stroke: #6b7fae; stroke-width: .8; }
+.mobo .capx { stroke: #6b7fae; stroke-width: .7; }
+.mobo .goldcap { fill: #3a2c08; stroke: var(--gold); stroke-width: 1; }
+.mobo .pin { fill: #d9b44a; opacity: .75; }
+.mobo .lga { fill: #c79b3b; opacity: .5; }
+.mobo .choke { fill: #121b33; stroke: #4a5f93; stroke-width: 1; }
+.mobo .core { fill: var(--lit); opacity: .18; animation: mb-pulse 2.4s ease-in-out infinite; }
+.mobo .glow { filter: drop-shadow(0 0 4px var(--lit)); }
+.mobo .glowp { filter: drop-shadow(0 0 4px var(--pink)); }
+.mobo .blade { fill: rgba(63,224,255,.38); stroke: #3fe0ff; stroke-width: .7; }
+.mobo .blade.p { fill: rgba(255,77,216,.32); stroke: #ff4dd8; }
+.mobo .hub { fill: #0b1226; stroke: #3fe0ff; stroke-width: 1; }
+.mobo .lcd { fill: #02040a; stroke: #3fe0ff; stroke-width: 1.2; }
+.mobo .lcdtxt { fill: #3fe0ff; font: 400 22px var(--font-mono); text-anchor: middle; }
+.mobo .lcdsub { fill: #7d8bab; font: 400 7.5px var(--font-mono); text-anchor: middle; letter-spacing: .1em; }
+.mobo .seg { fill: #ff4d6d; font: 400 26px var(--font-mono); filter: drop-shadow(0 0 4px #ff4d6d); }
+.mobo .led { animation: mb-blink 1.6s steps(2) infinite; }
+.mobo .led.g { fill: var(--green); } .led.p { fill: var(--pink); } .led.y { fill: var(--gold); } .led.c { fill: var(--lit); }
+.mobo .ring { fill: none; stroke: url(#ringGrad); stroke-width: 2.6; }
+.mobo .spinring { transform-box: fill-box; transform-origin: center; animation: mb-spin 3s linear infinite; }
+.mobo .blades { transform-box: fill-box; transform-origin: center; animation: mb-spin var(--fan, 1.1s) linear infinite; }
+.mobo .blades.slow { animation-duration: calc(var(--fan, 1.1s) * 2.4); }
+.mobo .tube { fill: none; stroke: #0e1730; stroke-width: 13; stroke-linecap: round; }
+.mobo .tubeedge { fill: none; stroke: #2c4a86; stroke-width: 15; stroke-linecap: round; }
+.mobo .coolant { fill: none; stroke: #3fe0ff; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 6 12; filter: drop-shadow(0 0 4px #3fe0ff); animation: mb-flow .9s linear infinite; opacity: .85; }
+.mobo .coolant.hot { stroke: #ff9a1f; filter: drop-shadow(0 0 4px #ff6a1f); }
+.mobo .cable { fill: none; stroke-width: 3; stroke-linecap: round; }
+.mobo .ramchase { animation: mb-chase 2.4s linear infinite; }
+.mobo .eq { fill: var(--pink); transform-box: fill-box; transform-origin: 50% 100%; animation: mb-eq .9s ease-in-out infinite alternate; filter: drop-shadow(0 0 3px var(--pink)); }
+.mobo .wave { fill: none; stroke: var(--lit); stroke-width: 1.4; opacity: 0; animation: mb-wave 2s ease-out infinite; }
+.mobo .audioline { fill: none; stroke: var(--gold); stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
+.mobo .rgb { fill: none; stroke-width: 3.5; }
+.mobo .comp { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.mobo .comp.in { opacity: 1; }
+.mobo .comp.drop { animation: mb-drop .75s cubic-bezier(.2,1.5,.4,1); }
+.mobo .comp.hot { filter: drop-shadow(0 0 4px #ff3b1f) drop-shadow(0 0 10px #ff7a1f); }
+.mobo .comp.hot .blades { animation-duration: .16s; }
+.mobo .scorch { fill: #000; opacity: .4; filter: blur(4px); }
+.mobo .t-label { font: 700 12px var(--font-sans); text-anchor: middle; paint-order: stroke; stroke: rgba(0,0,0,.7); stroke-width: 4px; animation: mb-rise 1.7s ease-out forwards; }
+
+.mobo .fx .spark { stroke: #fff6a8; stroke-width: 2; stroke-linecap: round; animation: mb-burst .7s ease-out forwards; transform-box: fill-box; transform-origin: center; }
+.mobo .fx .pulse { fill: none; stroke-width: 2.4; animation: mb-ringfx 1.2s ease-out forwards; transform-box: fill-box; transform-origin: center; }
+.mobo .fx .flame { transform-box: fill-box; transform-origin: 50% 100%; animation: mb-flicker .28s ease-in-out infinite alternate; }
+.mobo .fx .flame.f2 { animation-duration: .21s; animation-delay: -.1s; }
+.mobo .fx .flame.f3 { animation-duration: .34s; animation-delay: -.2s; }
+.mobo .fx .smoke { fill: #8a8f99; opacity: 0; transform-box: fill-box; transform-origin: center; animation: mb-smoke 2.2s ease-out infinite; }
+.mobo .fx .steam { fill: #f2f5fa; opacity: 0; transform-box: fill-box; transform-origin: center; animation: mb-smoke 1.6s ease-out forwards; }
+
+@keyframes mb-flow { to { stroke-dashoffset: -28; } }
+@keyframes mb-pulse { 50% { opacity: .55; } }
+@keyframes mb-blink { 50% { opacity: .15; } }
+@keyframes mb-spin { to { transform: rotate(360deg); } }
+@keyframes mb-chase { to { filter: hue-rotate(360deg); } }
+@keyframes mb-eq { 0% { transform: scaleY(.25); } 100% { transform: scaleY(1); } }
+@keyframes mb-wave { 0% { opacity: .9; } 100% { opacity: 0; } }
+@keyframes mb-drop { 0% { opacity: 0; transform: translateY(-40px) scale(1.3); } 60% { opacity: 1; } 100% { transform: none; } }
+@keyframes mb-burst { 0% { opacity: 1; transform: scale(.2); } 100% { opacity: 0; transform: scale(1.8); } }
+@keyframes mb-ringfx { 0% { opacity: 1; transform: scale(.4); } 100% { opacity: 0; transform: scale(1.9); } }
+@keyframes mb-flicker { 0% { transform: scale(1, .82) skewX(-4deg); } 100% { transform: scale(.9, 1.12) skewX(5deg); } }
+@keyframes mb-smoke { 0% { opacity: 0; transform: translate(0,0) scale(.5); } 15% { opacity: .55; } 100% { opacity: 0; transform: translate(8px,-60px) scale(2.6); } }
+@keyframes mb-rise { 0% { opacity: 0; transform: translateY(6px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
+@media (prefers-reduced-motion: reduce) { .mobo svg *, .mobo .fx * { animation-duration: 0s !important; animation-iteration-count: 1 !important; } }
+
+/* ---------- desgaste: classes d1..d6 no svg, cumulativas ---------- */
+.mobo .dust circle { fill: #8c93a6; }
+.mobo .dust { opacity: 0; transition: opacity 1s; pointer-events: none; }
+.mobo .bulge { transform-box: fill-box; transform-origin: center; transition: transform .8s; }
+.mobo .leakcap, .mobo .puddle { opacity: 0; transition: opacity 1.2s; }
+.mobo .leakcap { fill: #6b4a12; }
+.mobo .puddle { fill: #3fe0ff; filter: blur(2px); }
+.mobo .arcs path { fill: none; stroke: #c9f3ff; stroke-width: 1.6; filter: drop-shadow(0 0 4px #7fd8ff) drop-shadow(0 0 8px #3fa9ff); }
+.mobo .gc-broken { display: none; }
+.mobo .drip { fill: #3fe0ff; filter: drop-shadow(0 0 3px #3fe0ff); animation: mb-drip 1.1s ease-in infinite; }
+.mobo .lcdglitch { animation: mb-jitter .18s steps(2) infinite; }
+.mobo .repair { stroke: #39ff8f; stroke-width: 2; stroke-linecap: round; animation: mb-burst .8s ease-out forwards; transform-box: fill-box; transform-origin: center; }
+
+.mobo .d1 .d-a { opacity: .55; }
+.mobo .d1 [data-fan="gpu2"] { animation: mb-stutter 1.6s ease-in-out infinite; }
+.mobo .d1 .rgb { animation: mb-flick 1.4s steps(1) infinite; }
+.mobo .d2 [data-fan="rad2"], .mobo .d2 [data-fan="ssd"] { animation-play-state: paused; }
+.mobo .d2 [data-fan="chip"] { animation-duration: 3.2s; }
+.mobo .d2 .bulge { transform: scale(1.4); }
+.mobo .d2 .bulge .cap { fill: #5a3a10; stroke: #ffb020; }
+.mobo .d2 .leakcap { opacity: .8; }
+.mobo .d2 .flow.lit { stroke: #ffb020; filter: drop-shadow(0 0 3px #ffb020); animation-duration: 3s; }
+.mobo .d2 .ring { opacity: .5; }
+.mobo .d3 .d-b { opacity: .7; }
+.mobo .d3 [data-ram="2"], .mobo .d3 [data-ram="3"] { opacity: .35; }
+.mobo .d3 [data-ram="2"] .ramchase, .mobo .d3 [data-ram="3"] .ramchase { animation: none; fill: #222; }
+.mobo .d3 .gconn { fill: #4a1a05; stroke: #ff7a1f; filter: drop-shadow(0 0 5px #ff7a1f); animation: mb-pulse .5s ease-in-out infinite; }
+.mobo .d3 [data-fan="rad1"] { animation: mb-stutter 2.2s ease-in-out infinite; }
+.mobo .d4 .gc-ok { display: none; }
+.mobo .d4 .gc-broken { display: inline; }
+.mobo .d4 [data-fan^="gpu"] { animation-play-state: paused; }
+.mobo .d4 .flow.lit { stroke: #ff4d6d; filter: drop-shadow(0 0 3px #ff4d6d); animation-duration: 5s; }
+.mobo .d4 .wave { animation: none; opacity: 0; }
+.mobo .d4 .eq { animation: none; transform: scaleY(.12); fill: #6b2a55; filter: none; }
+.mobo .d4 .ramchase { animation: mb-flick 1s steps(1) infinite; }
+.mobo .d5 .coolant { stroke: #ff9a1f; filter: drop-shadow(0 0 4px #ff6a1f); animation-duration: 5s; }
+.mobo .d5 .puddle { opacity: .45; }
+.mobo .d5 [data-fan="rad3"] { animation-play-state: paused; }
+.mobo .d5 .spinring { animation-duration: 12s; }
+.mobo .d6 .blades, .mobo .d6 .spinring { animation-play-state: paused; }
+.mobo .d6 .flow { opacity: .12 !important; }
+.mobo .d6 .rgb { opacity: .08; animation: none; }
+.mobo .d6 .coolant { animation: none; opacity: .3; }
+.mobo .d6 .led { animation: none; opacity: .2; }
+.mobo .d5 .comp { filter: saturate(.75) brightness(.9); }
+.mobo .d6 .comp { filter: saturate(.3) brightness(.6); }
+.mobo .d6 .pcb { fill: #050912; }
+
+@keyframes mb-stutter { 0% { transform: rotate(0); } 35% { transform: rotate(250deg); } 55% { transform: rotate(262deg); } 70% { transform: rotate(270deg); } 100% { transform: rotate(360deg); } }
+@keyframes mb-flick { 0% { opacity: 1; } 8% { opacity: .1; } 12% { opacity: 1; } 47% { opacity: .2; } 50% { opacity: 1; } 80% { opacity: .5; } }
+@keyframes mb-drip { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(42px); opacity: .2; } }
+@keyframes mb-jitter { 0% { transform: translate(-1px, 0); } 100% { transform: translate(1.5px, -1px); } }
+.mobo .levels { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; }
+.mobo .lv { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; transition: border-color .3s; }
+.mobo .lv.on { border-color: #7a2333; box-shadow: 0 0 0 1px #7a2333 inset; }
+.mobo .lv h3 { font: 600 15px var(--font-sans); margin: 0 0 6px; }
+.mobo .lv h3 b { color: var(--down); font-weight: 700; margin-right: 6px; }
+.mobo .lv ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+.mobo .health { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.mobo .health i { display: block; width: 120px; height: 8px; border-radius: 4px; background: #1a2238; overflow: hidden; }
+.mobo .health i span { display: block; height: 100%; background: linear-gradient(90deg, #ff4d6d, #ffd24d, #39ff8f); transition: width .5s; }
+.mobo input[type=range] { accent-color: #ff4d6d; width: 160px; }
+.mobo .ideas { margin-top: 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
+.mobo .ideas h2 { font: 600 16px var(--font-sans); margin: 0 0 8px; }
+.mobo .ideas ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+.mobo .ideas li { margin-bottom: 4px; }
+.mobo .ideas b { color: var(--text); font-weight: 600; }
+.mobo .comp.out { animation: mb-out .6s ease-in forwards; }
+@keyframes mb-out { 0% { opacity: 1; } 100% { opacity: 0; transform: translateY(40px) scale(.8) rotate(6deg); } }

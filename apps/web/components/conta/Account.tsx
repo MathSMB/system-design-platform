@@ -1,16 +1,18 @@
 "use client";
 
-import { GOALS, type Goal } from "@sdp/habit";
+import { planOf, planText } from "@sdp/habit";
 import { AREAS, LEVELS, STACKS, getStack, trackTitle, type AreaId, type Level } from "@sdp/hiring";
 import { LogOut, Plus, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { PlanEditor, planReady, planValue, type PlanValue } from "@/components/habito/PlanEditor";
 
 export interface ProfileRow {
   id: string;
   stack: string;
   level: string;
   goal: string;
+  plan?: unknown;
   startDay: string;
 }
 export interface SessionData {
@@ -35,6 +37,7 @@ export function Account() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; v: PlanValue } | null>(null);
 
   const load = () =>
     fetch("/api/conta")
@@ -113,7 +116,7 @@ export function Account() {
 
       <div className="flex flex-col gap-2">
         <div className="hud-label">Seus perfis</div>
-        {s.profiles.length === 0 && <p className="text-sm text-muted">Crie um perfil para a vaga que você está treinando. Cada perfil tem o seu rack e a sua meta.</p>}
+        {s.profiles.length === 0 && <p className="text-sm text-muted">Crie um perfil para a vaga que você está treinando. Cada perfil tem a sua placa-mãe e a sua meta.</p>}
         {s.profiles.map((p) => {
           const active = s.profile?.id === p.id;
           return (
@@ -122,22 +125,37 @@ export function Account() {
                 <span className="font-semibold">{profileTitle(p)}</span>
                 <span className="text-[12px] text-muted">desde {p.startDay.split("-").reverse().join("/")}</span>
               </div>
-              <label className="flex items-center gap-2 text-[12px] text-muted">
-                Meta
-                <select value={p.goal} onChange={(e) => call("/api/perfis", json("PATCH", { id: p.id, goal: e.target.value }))}>
-                  {GOALS.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="flex min-w-48 flex-1 flex-col text-[12px]">
+                <span className="text-muted">Meta diária</span>
+                <span>{planText(planOf(p.goal, p.plan))}</span>
+              </div>
+              <button onClick={() => setEditing(editing?.id === p.id ? null : { id: p.id, v: planValue(p.goal, p.plan) })} className="btn-ghost px-3 py-1 text-xs">
+                Editar meta
+              </button>
               {active ? (
                 <span className="font-mono text-[11px] uppercase text-ok">ativo</span>
               ) : (
                 <button onClick={() => call("/api/perfis", json("PATCH", { id: p.id, active: true }))} className="btn-ghost px-3 py-1 text-xs">
                   Usar este
                 </button>
+              )}
+              {editing?.id === p.id && (
+                <div className="flex w-full flex-col gap-3 border-t border-border pt-3">
+                  <PlanEditor value={editing.v} onChange={(v) => setEditing({ id: p.id, v })} />
+                  <p className="text-[12px] text-muted">A meta nova vale a partir de hoje; os dias anteriores continuam com a meta antiga.</p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      disabled={!planReady(editing.v.plan)}
+                      onClick={async () => (await call("/api/perfis", json("PATCH", { id: p.id, ...editing.v }))) && setEditing(null)}
+                      className="btn-neon px-4 py-2 text-xs disabled:opacity-40"
+                    >
+                      Salvar meta ▶
+                    </button>
+                    <button onClick={() => setEditing(null)} className="text-[12px] text-muted underline">
+                      cancelar
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           );
@@ -159,11 +177,11 @@ export function Account() {
   );
 }
 
-function NewProfile({ taken, onCreate, onCancel }: { taken: ProfileRow[]; onCreate(v: { stack: string; level: Level; goal: Goal }): void; onCancel(): void }) {
+function NewProfile({ taken, onCreate, onCancel }: { taken: ProfileRow[]; onCreate(v: { stack: string; level: Level } & PlanValue): void; onCancel(): void }) {
   const [area, setArea] = useState<AreaId>("backend");
   const [stack, setStack] = useState("java");
   const [level, setLevel] = useState<Level>("pleno");
-  const [goal, setGoal] = useState<Goal>("regular");
+  const [goal, setGoal] = useState<PlanValue>(planValue("sugerida"));
   const dup = taken.some((p) => p.stack === stack && p.level === level);
   return (
     <div className="panel flex flex-col gap-4 p-4 text-sm">
@@ -210,18 +228,11 @@ function NewProfile({ taken, onCreate, onCancel }: { taken: ProfileRow[]; onCrea
       {!getStack(stack)?.ready.includes(level) && <p className="text-[12px] text-muted">Essa vaga ainda não tem processo seletivo (pesquisa pendente), mas as respostas e os casos de system design contam para a meta.</p>}
       <div className="flex flex-col gap-2">
         <span>Meta diária</span>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {GOALS.map((g) => (
-            <button key={g.id} type="button" onClick={() => setGoal(g.id)} className={`panel flex flex-col gap-1 p-3 text-left transition-colors ${goal === g.id ? "!border-ok" : "hover:border-muted"}`}>
-              <span className={`font-display text-[11px] ${goal === g.id ? "text-ok" : ""}`}>{g.title}</span>
-              <span className="text-[12px] text-muted">{g.rule}</span>
-              <span className="font-mono text-[11px] text-muted">~{g.minutes} min</span>
-            </button>
-          ))}
-        </div>
+        <p className="text-[12px] text-muted">Começa com a sugerida. Você pode escolher outro modelo ou escrever o seu tipo de estudo; a partir daí o hábito começa a contar.</p>
+        <PlanEditor value={goal} onChange={setGoal} />
       </div>
       <div className="flex items-center gap-3">
-        <button disabled={dup} onClick={() => onCreate({ stack, level, goal })} className="btn-neon px-4 py-2 text-xs disabled:opacity-40">
+        <button disabled={dup || !planReady(goal.plan)} onClick={() => onCreate({ stack, level, ...goal })} className="btn-neon px-4 py-2 text-xs disabled:opacity-40">
           Criar perfil ▶
         </button>
         <button onClick={onCancel} className="text-[12px] text-muted underline">

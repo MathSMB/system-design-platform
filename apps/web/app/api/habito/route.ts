@@ -1,14 +1,14 @@
-import { EMPTY, addDays, computeHabit, dayInBrazil, isGoal, type DayCounts } from "@sdp/habit";
+import { EMPTY, addDays, cleanHistory, computeHabit, dayInBrazil, planOf, type DayCounts } from "@sdp/habit";
 import { trackTitle, type Level } from "@sdp/hiring";
 import { and, count, eq, gte } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/client";
-import { activities } from "@/lib/db/schema";
+import { activities, checkins } from "@/lib/db/schema";
 import { getSession } from "@/lib/session";
 
 const FIELD = { answer: "answers", stage: "stages", process: "processes", design: "designs" } as const;
 
-/** O rack do perfil ativo: ofensiva, failovers, marcos e as contagens do último ano. */
+/** A placa-mãe do perfil ativo: peças, desgaste, ofensiva, failovers e o último ano. */
 export async function GET() {
   const db = getDb();
   if (!db) return NextResponse.json({ db: false });
@@ -18,11 +18,17 @@ export async function GET() {
   const p = s.profile;
   const today = dayInBrazil();
   const since = addDays(today, -370);
-  const rows = await db
-    .select({ day: activities.day, kind: activities.kind, n: count() })
-    .from(activities)
-    .where(and(eq(activities.profileId, p.id), gte(activities.day, since)))
-    .groupBy(activities.day, activities.kind);
+  const [rows, marks] = await Promise.all([
+    db
+      .select({ day: activities.day, kind: activities.kind, n: count() })
+      .from(activities)
+      .where(and(eq(activities.profileId, p.id), gte(activities.day, since)))
+      .groupBy(activities.day, activities.kind),
+    db
+      .select({ day: checkins.day, itemId: checkins.itemId })
+      .from(checkins)
+      .where(and(eq(checkins.profileId, p.id), gte(checkins.day, since))),
+  ]);
   const counts: Record<string, DayCounts> = {};
   for (const r of rows) {
     const f = FIELD[r.kind as keyof typeof FIELD];
@@ -30,6 +36,8 @@ export async function GET() {
     counts[r.day] ??= { ...EMPTY };
     counts[r.day]![f] += Number(r.n);
   }
-  const habit = computeHabit({ start: p.startDay < since ? since : p.startDay, today, goal: isGoal(p.goal) ? p.goal : "leve", counts });
-  return NextResponse.json({ db: true, session: s, title: trackTitle(p.stack, p.level as Level), habit, counts });
+  const checks: Record<string, string[]> = {};
+  for (const m of marks) (checks[m.day] ??= []).push(m.itemId);
+  const habit = computeHabit({ start: p.startDay < since ? since : p.startDay, today, plan: planOf(p.goal, p.plan), counts, checks, history: cleanHistory(p.planHistory) });
+  return NextResponse.json({ db: true, session: s, title: trackTitle(p.stack, p.level as Level), habit });
 }

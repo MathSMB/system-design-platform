@@ -12,7 +12,7 @@ export default function Page() {
       <h1 className="mt-3 font-display text-xl leading-relaxed">
         Seus <span className="text-ok glow">perfis.</span>
       </h1>
-      <p className="mt-3 mb-6 text-muted">A plataforma continua aberta sem conta. Com conta, cada perfil (a vaga que você treina) tem o seu rack de hábito, a sua meta diária e o seu histórico.</p>
+      <p className="mt-3 mb-6 text-muted">A plataforma continua aberta sem conta. Com conta, cada perfil (a vaga que você treina) tem a sua máquina de hábito (a placa-mãe), a sua meta diária e o seu histórico.</p>
       <Account />
     </main>
   );

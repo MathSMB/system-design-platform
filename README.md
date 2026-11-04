@@ -59,11 +59,22 @@ Para usar um Postgres local em vez do Neon: `docker compose up -d` e `DATABASE_U
 
 Entre em `/conta` (um clique, sem senha; login com Google e GitHub está nas pendências) e crie um perfil: stack, senioridade e meta diária.
 
-- **Leve:** 1 resposta avaliada pela IA.
-- **Regular:** 3 respostas ou 1 etapa do processo seletivo.
-- **Intensa:** 1 processo seletivo inteiro ou 1 caso de system design avaliado.
+A meta é sua. O padrão sugerido é "30 min de estudo do seu jeito + 1 resposta avaliada pela IA", mas dá para escolher um modelo pronto (Leve, Regular, Intensa) ou montar a sua lista de itens:
 
-A meta é marcada sozinha. Cada dia cumprido sobe um servidor no rack, e o datacenter cresce com a ofensiva: Cluster (7 dias), Multi-AZ (30), Multi-região (66) e Edge global (100). São 2 failovers por semana. Sem failover, dá para recuperar o dia perdido fazendo a meta em dobro no dia seguinte. As regras ficam em `packages/habit`.
+- **Itens que você marca:** o seu tipo de estudo, ex. "1 hora de Spring Boot". Você dá o check no dia (ou no dia seguinte, se esqueceu).
+- **Itens automáticos:** respostas avaliadas pela IA, etapas e processos seletivos e casos de system design, contados sozinhos pela plataforma.
+
+A meta conta com todos os itens ou com qualquer um deles. Trocar a meta não muda o passado: a antiga continua valendo para os dias anteriores.
+
+A tela mostra uma placa-mãe vista de cima:
+
+- Cada dia cumprido instala uma peça (15 ao todo, do processador ao RGB). Com a placa completa, cada dia vira overclock.
+- São 2 failovers por semana. Dia perdido com failover não quebra nada.
+- Sem failover, a máquina sobe um nível de desgaste: poeira, superaquecimento, curto-circuito, cabo rompido, vazamento e, no 6º, fogo.
+- O próximo dia cumprido conserta um nível antes de instalar peça nova, e as ventoinhas voltam aos poucos.
+- No 6º nível a máquina queima: todas as peças saem e a montagem recomeça do zero (fica a marca de queimado).
+
+A tela anima o que mudou desde a sua última visita. As regras ficam em `packages/habit`.
 
 ## Ver online (Vercel)
 
