@@ -42,7 +42,7 @@ import { AiConversation, SessionFeedbackPanel, answersOf, levelOf, type ConvResu
 import { Bubble } from "@/components/answer/Chat";
 import { AnswerFeedback, LEVEL_COLOR } from "@/components/answer/VoiceAnswer";
 import { RACE_INTERVIEWS } from "@/lib/concurrency/interviews";
-import { SaveBadge, useSaveHistory } from "@/lib/history";
+import { SaveBadge, countActivity, useSaveHistory } from "@/lib/history";
 import { ConvSequence, fromReview, fromStep, type ConvItem } from "./parts";
 
 // ───────────────────────── Estado ─────────────────────────
@@ -188,6 +188,9 @@ export function HiringSim() {
     setRun(next);
     setPending(null);
     window.scrollTo({ top: 0 });
+    // conta para a meta diária do perfil ativo (se tiver conta)
+    countActivity("stage", `${run.id}:${stage}`);
+    if (next.stage === "fim") countActivity("process", run.id);
   }
 
   const restart = (same: boolean) => {

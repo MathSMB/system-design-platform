@@ -4,6 +4,7 @@ import type { AnswerEvaluation, SessionFeedback } from "@sdp/ai";
 import { History as HistoryIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AnswerFeedback, LEVEL_COLOR, SessionFeedbackView } from "@/components/answer/VoiceAnswer";
+import { profileTitle, type ProfileRow } from "@/components/conta/Account";
 
 interface Item {
   id: string;
@@ -14,6 +15,7 @@ interface Item {
   score: number | null;
   level: string;
   feedback: SessionFeedback | null;
+  profileId: string | null;
   createdAt: string;
 }
 
@@ -26,7 +28,8 @@ function answersOf(state: any): { question: string; evals: AnswerEvaluation[] }[
 const TARGET: Record<string, string> = { junior: "júnior", pleno: "pleno", senior: "sênior" };
 
 export function History() {
-  const [data, setData] = useState<{ db: boolean; items: Item[] } | null>(null);
+  const [data, setData] = useState<{ db: boolean; items: Item[]; profiles?: ProfileRow[]; signedIn?: boolean } | null>(null);
+  const [filter, setFilter] = useState<string>("todos");
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, any>>({});
 
@@ -62,10 +65,24 @@ export function History() {
           <code className="text-text">pnpm --filter web db:push</code> e reinicie o <code className="text-text">pnpm dev</code>.
         </div>
       )}
+      {data?.db && !data.signedIn && (
+        <p className="mt-4 text-[12px] text-muted">
+          Mostrando as entrevistas feitas sem conta. <a href="/conta" className="underline hover:text-ok">Entre</a> para ver as do seu perfil.
+        </p>
+      )}
+      {!!data?.profiles?.length && (
+        <div className="mt-5 flex flex-wrap gap-2 text-xs">
+          {[{ id: "todos", label: "Todos os perfis" }, ...data.profiles.map((p) => ({ id: p.id, label: profileTitle(p) }))].map((f) => (
+            <button key={f.id} onClick={() => setFilter(f.id)} className={`btn-ghost px-3 py-1 ${filter === f.id ? "border-accent text-accent" : ""}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
       {data?.db && data.items.length === 0 && <p className="mt-6 text-sm text-muted">Nenhuma entrevista terminada ainda.</p>}
 
       <div className="mt-6 flex flex-col gap-2">
-        {data?.items.map((it) => (
+        {data?.items.filter((it) => filter === "todos" || it.profileId === filter).map((it) => (
           <div key={it.id} className="panel p-3 text-[13px]">
             <button onClick={() => toggle(it.id)} className="flex w-full items-start justify-between gap-3 text-left">
               <span className="flex flex-col gap-0.5">

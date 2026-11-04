@@ -41,17 +41,57 @@ AI_PROVIDER=api
 ANTHROPIC_API_KEY=...
 ```
 
-### Banco (Neon)
+### Banco: salvo no seu computador, sem configurar nada
 
-O banco guarda os desenhos, o histórico das suas entrevistas (respostas, feedback de cada uma e feedback geral) e a pesquisa de mercado de cada vaga. Sem banco, tudo funciona, mas os desenhos ficam no navegador e o histórico fica desligado.
+O banco guarda os desenhos, o histórico das suas entrevistas, a pesquisa de cada vaga, as contas com o hábito de cada perfil e a Central de estudos.
 
-1. Crie uma conta grátis em [neon.tech](https://neon.tech) e um projeto (região São Paulo, `sa-east-1`).
-2. No painel, em **Connect**, copie a connection string (começa com `postgresql://` e termina com `?sslmode=require`).
+**Sem `DATABASE_URL`, a plataforma usa um Postgres embutido (PGlite) salvo em `apps/web/.data/`.** É só rodar `pnpm dev`: as tabelas são criadas sozinhas e tudo continua lá na próxima vez. Para fazer backup, copie a pasta `apps/web/.data/` com o `pnpm dev` fechado. Só um processo usa a pasta por vez, então feche o `pnpm dev` antes de abrir o `pnpm --filter web db:studio`.
+
+Quando o projeto ganhar tabelas novas, elas são aplicadas sozinhas ao subir o `pnpm dev` (migrações em `apps/web/drizzle/`). Quem mexer no schema roda `pnpm --filter web db:generate` para criar a migração.
+
+**Opcional: Neon (Postgres na nuvem, grátis)**, para ter os mesmos dados em outro computador:
+
+1. Crie uma conta em [neon.tech](https://neon.tech) e um projeto (região São Paulo, `sa-east-1`).
+2. Em **Connect**, copie a connection string (começa com `postgresql://`).
 3. Crie `apps/web/.env.local` a partir de `apps/web/.env.example` e cole em `DATABASE_URL`.
-4. Crie as tabelas: `pnpm --filter web db:push`
-5. Reinicie o `pnpm dev`.
+4. Crie as tabelas: `pnpm --filter web db:push`, e reinicie o `pnpm dev`.
 
-Para usar um Postgres local em vez do Neon: `docker compose up -d` e `DATABASE_URL=postgres://sdp:sdp@localhost:5432/sdp`.
+Para um Postgres local com Docker: `docker compose up -d` e `DATABASE_URL=postgres://sdp:sdp@localhost:5432/sdp`.
+
+### Central de estudos (`/estudos`)
+
+Junta tudo o que você estuda para conseguir a vaga do perfil:
+
+- **Pesquisa da vaga:** você escreve o cargo e a IA (o seu Claude Code, com busca na web) lê de 15 a 30 anúncios reais, conta quantos pedem cada habilidade e salva a pesquisa com fontes, faixa salarial e temas de entrevista. Leva alguns minutos, roda em segundo plano e vale por 6 meses.
+- **O que as vagas pedem:** gráfico com a % de anúncios de cada habilidade. Você marca "não sei", "estudando" ou "domino".
+- **Pronto para a vaga:** % que pesa cada habilidade pela frequência nas vagas, e a lista do que mais falta.
+- **Trilhas:** pós, certificação, livro, curso, projeto. O botão **Conversar com a IA** monta a trilha com você (matérias, capítulos, módulos, prazo, quantas vezes por semana e o tamanho de cada sessão). Também dá para adicionar à mão.
+- **Projetos:** a IA sugere 3 projetos de portfólio que cobrem o que falta; o escolhido vira trilha com as entregas.
+- **Cronograma:** a partir do seu tempo livre em cada dia da semana (com folga para imprevistos), a IA monta as próximas 2 semanas em blocos curtos, com revisão espaçada e treinos com nota na plataforma. Cada trilha entra só as vezes por semana combinadas. Replanejar (todo domingo, ou quando a semana muda) refaz daqui para frente e nunca muda o passado.
+- **Meta do dia:** o item "Cumprir o cronograma do dia" pode entrar na meta da placa-mãe. Ele conta sozinho quando você marca todos os blocos do dia.
+
+As regras ficam em `packages/study`; os prompts da IA, em `packages/ai/src/study.ts`.
+
+### Hábito (`/habito`)
+
+Entre em `/conta` (um clique, sem senha; login com Google e GitHub está nas pendências) e crie um perfil: stack, senioridade e meta diária.
+
+A meta é sua. O padrão sugerido é "30 min de estudo do seu jeito + 1 resposta avaliada pela IA", mas dá para escolher um modelo pronto (Leve, Regular, Intensa) ou montar a sua lista de itens:
+
+- **Itens que você marca:** o seu tipo de estudo, ex. "1 hora de Spring Boot". Você dá o check no dia (ou no dia seguinte, se esqueceu).
+- **Itens automáticos:** respostas avaliadas pela IA, etapas e processos seletivos e casos de system design, contados sozinhos pela plataforma.
+
+A meta conta com todos os itens ou com qualquer um deles. Trocar a meta não muda o passado: a antiga continua valendo para os dias anteriores.
+
+A tela mostra uma placa-mãe vista de cima:
+
+- Cada dia cumprido instala uma peça (15 ao todo, do processador ao RGB). Com a placa completa, cada dia vira overclock.
+- São 2 failovers por semana. Dia perdido com failover não quebra nada.
+- Sem failover, a máquina sobe um nível de desgaste: poeira, superaquecimento, curto-circuito, cabo rompido, vazamento e, no 6º, fogo.
+- O próximo dia cumprido conserta um nível antes de instalar peça nova, e as ventoinhas voltam aos poucos.
+- No 6º nível a máquina queima: todas as peças saem e a montagem recomeça do zero (fica a marca de queimado).
+
+A tela anima o que mudou desde a sua última visita. As regras ficam em `packages/habit`.
 
 ## Ver online (Vercel)
 
