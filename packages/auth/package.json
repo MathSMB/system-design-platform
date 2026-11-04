@@ -10,7 +10,9 @@
     "./token": "./src/token.ts",
     "./routes/conta": "./src/routes/conta.ts",
     "./routes/perfis": "./src/routes/perfis.ts",
-    "./routes/eventos": "./src/routes/eventos.ts"
+    "./routes/eventos": "./src/routes/eventos.ts",
+    "./routes/entrar": "./src/routes/entrar.ts",
+    "./oauth": "./src/oauth.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

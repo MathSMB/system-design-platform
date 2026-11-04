@@ -59,12 +59,24 @@ export type InterviewRun = typeof interviewRuns.$inferSelect;
 export type MarketProfile = typeof marketProfiles.$inferSelect;
 
 /**
- * Conta de usuário. Por enquanto a entrada é com um clique, sem senha
- * (uso pessoal). Login com Google e GitHub está nas pendências.
+ * Conta de usuário. Entra com GitHub, com Google ou, sem chaves configuradas,
+ * com um clique (uso pessoal, local).
  */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  email: text("email"),
+  avatarUrl: text("avatar_url"),
+  /** Cargo de hoje (ex. "Desenvolvedor júnior", "Estudante"). */
+  jobTitle: text("job_title"),
+  /** Tempo de experiência: "0" | "1-2" | "3-5" | "6+". */
+  experience: text("experience"),
+  /** Objetivo: "primeiro-emprego" | "trocar-empresa" | "subir-nivel" | "mudar-area" | "afiado". */
+  objective: text("objective"),
+  /** Contas conectadas (login com GitHub e Google). */
+  githubId: text("github_id").unique(),
+  githubLogin: text("github_login"),
+  googleId: text("google_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

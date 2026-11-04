@@ -1,5 +1,5 @@
+import { PlatformLanding } from "@/components/PlatformLanding";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Briefcase, Compass, Cpu, LayoutDashboard, Network, UserRound, type LucideIcon } from "lucide-react";
 import { getSession, type Session } from "@sdp/auth";
 import { recentEvents } from "@sdp/events";
@@ -29,8 +29,8 @@ export default async function Painel() {
   } catch {
     dbUp = false;
   }
-  // o Painel é a área de quem entrou: sem conta, vai para o login
-  if (dbUp && !session) redirect("/conta");
+  // sem conta, o endereço do Painel mostra a página da plataforma (os quatro apps)
+  if (dbUp && !session) return <PlatformLanding />;
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
       <div className="flex items-center gap-2 hud-label">
@@ -39,7 +39,12 @@ export default async function Painel() {
       <h1 className="mt-3 font-display text-xl leading-relaxed">
         Escolha o <span className="text-accent glow">app.</span>
       </h1>
-      <p className="mt-3 max-w-2xl text-muted">Cada parte da plataforma é um app separado, na sua porta. A conta é uma só: entrando aqui, você já está dentro de todos.</p>
+      <p className="mt-3 max-w-2xl text-muted">
+        Cada parte da plataforma é um app separado, na sua porta. A conta é uma só: entrando aqui, você já está dentro de todos.{" "}
+        <Link href="/sobre" className="text-accent underline-offset-4 hover:underline">
+          Como os quatro se completam
+        </Link>
+      </p>
 
       <section className="mt-6">
         {!dbUp ? (

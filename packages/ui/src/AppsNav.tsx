@@ -22,7 +22,7 @@ export function AppsNav({ current }: { current: AppId }) {
   const apps = APP_LIST.filter((a) => a.id !== "painel" || logged);
   return (
     <>
-      <a href={logged ? appUrl("painel") : "/"} className="flex shrink-0 items-center gap-2 font-display text-[11px] text-accent glow">
+      <a href={appUrl("painel")} title="System Design Lab: os quatro apps" className="flex shrink-0 items-center gap-2 font-display text-[11px] text-accent glow">
         <span className="text-accent-2">&gt;</span>
         <span className="hidden lg:inline">SYSTEM_DESIGN_LAB</span>
         <span className="lg:hidden">SDL</span>

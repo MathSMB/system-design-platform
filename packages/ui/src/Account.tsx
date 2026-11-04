@@ -9,11 +9,13 @@ import { appUrl, type AppId } from "./apps";
 import { loginUrl, useSession } from "./useSession";
 import { profileTitle, type ProfileRow, type SessionData } from "./profile";
 import { PlanEditor, planReady, planValue, type PlanValue } from "./PlanEditor";
+import { Avatar, ConnectedAccounts, DetailsCard, SignupForm, SocialButtons, loginError, type Providers } from "./AccountForms";
 
 interface ContaData {
   db: boolean;
   session: SessionData | null;
   users: { id: string; name: string }[];
+  providers?: Providers;
 }
 
 const json = (method: string, body?: unknown) => ({ method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -24,7 +26,8 @@ export function Account() {
   const router = useRouter();
   const [data, setData] = useState<ContaData | null>(null);
   const [error, setError] = useState("");
-  const [name, setName] = useState("");
+  const [oauthError, setOauthError] = useState("");
+  useEffect(() => setOauthError(loginError(new URLSearchParams(window.location.search).get("erro"))), []);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<{ id: string; v: PlanValue } | null>(null);
 
@@ -63,45 +66,40 @@ export function Account() {
     );
 
   const s = data.session;
+  const providers = data.providers ?? { github: false, google: false };
   if (!s)
     return (
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
+        {oauthError && <p className="panel !border-down/60 p-3 text-sm text-down">{oauthError}</p>}
+        <SocialButtons providers={providers} />
+        <div className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
+          <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
+        </div>
+        <SignupForm onSubmit={(body) => call("/api/conta", json("POST", body))} />
+        {error && <p className="text-sm text-down">{error}</p>}
         {data.users.length > 0 && (
           <div className="flex flex-col gap-2">
-            <div className="hud-label">Entrar como</div>
+            <div className="hud-label">Já tem conta local? Entre com um clique</div>
             <div className="flex flex-wrap gap-2">
               {data.users.map((u) => (
-                <button key={u.id} onClick={() => call("/api/conta", json("POST", { userId: u.id }))} className="btn-neon flex items-center gap-2 px-4 py-2 text-xs">
-                  <UserRound size={14} /> {u.name}
+                <button key={u.id} onClick={() => call("/api/conta", json("POST", { userId: u.id }))} className="btn-ghost flex items-center gap-2 px-3 py-1.5 text-xs">
+                  <UserRound size={13} /> {u.name}
                 </button>
               ))}
             </div>
           </div>
         )}
-        <form
-          className="panel flex flex-col gap-3 p-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            call("/api/conta", json("POST", { name }));
-          }}
-        >
-          <div className="hud-label">Criar conta</div>
-          <label className="flex flex-col gap-1 text-sm">
-            Seu nome
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex. Matheus" className="max-w-xs" />
-          </label>
-          <button className="btn-neon self-start px-4 py-2 text-xs">Criar e entrar ▶</button>
-          <p className="text-[12px] text-muted">Por enquanto é só clicar e entrar, sem senha. Login com Google e GitHub vem depois.</p>
-        </form>
-        {error && <p className="text-sm text-down">{error}</p>}
       </div>
     );
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-lg">
-          Olá, <span className="font-semibold text-ok">{s.user.name}</span>
+        <div className="flex items-center gap-3 text-lg">
+          <Avatar user={s.user} size={36} />
+          <span>
+            Olá, <span className="font-semibold text-ok">{s.user.name}</span>
+          </span>
         </div>
         <button onClick={() => call("/api/conta", json("DELETE"))} className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs">
           <LogOut size={13} /> Sair
@@ -167,6 +165,12 @@ export function Account() {
         )}
       </div>
       {error && <p className="text-sm text-down">{error}</p>}
+      {oauthError && <p className="text-sm text-down">{oauthError}</p>}
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <DetailsCard user={s.user} onSave={(v) => call("/api/conta", json("PATCH", v))} />
+        <ConnectedAccounts user={s.user} providers={providers} />
+      </div>
     </div>
   );
 }
@@ -261,7 +265,7 @@ export function AccountChip({ current }: { current: AppId }) {
         </a>
       )}
       <a href={appUrl("painel", "/conta")} title={s.profile ? profileTitle(s.profile) : undefined} className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-2 py-1 text-xs text-muted transition-colors hover:border-ok hover:text-ok">
-        <UserRound size={13} />
+        <Avatar user={s.user} size={18} />
         <span className="hidden max-w-32 truncate text-text sm:inline">{s.user.name}</span>
       </a>
     </div>

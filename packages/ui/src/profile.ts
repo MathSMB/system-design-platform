@@ -8,8 +8,20 @@ export interface ProfileRow {
   plan?: unknown;
   startDay: string;
 }
+export interface UserRow {
+  id: string;
+  name: string;
+  email?: string | null;
+  avatarUrl?: string | null;
+  jobTitle?: string | null;
+  experience?: string | null;
+  objective?: string | null;
+  githubId?: string | null;
+  githubLogin?: string | null;
+  googleId?: string | null;
+}
 export interface SessionData {
-  user: { id: string; name: string };
+  user: UserRow;
   profiles: ProfileRow[];
   profile: ProfileRow | null;
 }
