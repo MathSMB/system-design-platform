@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Briefcase, Coffee, History, Network, UserRound, type LucideIcon } from "lucide-react";
+import { Briefcase, Coffee, History, Network, type LucideIcon } from "lucide-react";
 import { COMPANIES, JAVA_PLENO, STACKS } from "@sdp/hiring";
 import { appUrl } from "@sdp/ui";
+import { EntrevistaIntro } from "@/components/home/Intro";
 
 interface Card {
   href: string;
@@ -50,13 +51,15 @@ export default function Entrevista() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
       <div className="flex items-center gap-2 hud-label !text-bad">
-        <UserRound size={14} /> Entrevista
+        <Briefcase size={14} /> Entrevista
       </div>
       <h1 className="mt-3 font-display text-xl leading-relaxed">
         Do RH à <span className="text-bad glow">contratação.</span>
       </h1>
       <p className="mt-3 max-w-2xl text-muted">Treine a entrevista inteira ou só a parte técnica da sua stack. A IA avalia cada resposta e, no fim, dá um feedback geral.</p>
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <EntrevistaIntro />
+      <h2 className="hud-label mt-10 !text-bad">Escolha o treino</h2>
+      <div className="mt-3 grid gap-4 md:grid-cols-3">
         {CARDS.map(({ href, title, body, count, Icon, tone }) => (
           <Link key={href} href={href} className={`panel group flex flex-col gap-3 p-6 transition-shadow ${TONE[tone].hover}`}>
             <Icon size={34} className={TONE[tone].text} style={{ filter: `drop-shadow(0 0 8px var(--${tone}))` }} />

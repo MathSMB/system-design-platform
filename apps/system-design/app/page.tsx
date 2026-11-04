@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BookOpen, FlaskConical, GraduationCap, PenTool, UserRound } from "lucide-react";
 import { HeroFlow } from "@/components/home/HeroFlow";
+import { SdIntro } from "@/components/home/Intro";
 import { RACE_INTERVIEWS } from "@sdp/race-sim";
 import { RACE_LESSONS } from "@/lib/concurrency/lessons";
 import { CASES } from "@/lib/training/cases";
@@ -48,12 +49,15 @@ export default function Home() {
             <br />
             <span className="text-accent glow">Veja onde quebra.</span>
           </h1>
-          <p className="mt-5 max-w-xl text-lg text-muted">Escolha como quer treinar hoje.</p>
+          <p className="mt-5 max-w-xl text-lg text-muted">Monte a arquitetura, coloque carga de verdade e prepare a resposta da entrevista.</p>
         </div>
         <HeroFlow />
       </div>
 
-      <div className="mt-10 grid gap-5 md:grid-cols-2">
+      <SdIntro />
+
+      <h2 className="hud-label mt-10">Escolha como quer treinar hoje</h2>
+      <div className="mt-3 grid gap-5 md:grid-cols-2">
         {MODES.map(({ href, title, Icon, tone, body, areas }) => (
           <div
             key={href}

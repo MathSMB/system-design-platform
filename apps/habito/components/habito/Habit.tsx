@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { profileTitle, type SessionData, PlanEditor, planReady, planValue, type PlanValue, appUrl } from "@sdp/ui";
 import { Board } from "./Board";
+import { HabitIntro } from "./Intro";
 
 interface Data {
   db: boolean;
@@ -58,6 +59,7 @@ export function Habit() {
       <p className="mt-3 max-w-3xl text-muted">
         Cada dia de meta cumprida instala uma peça na placa-mãe. Dia perdido gasta um failover da semana; sem failover, a máquina se desgasta. O próximo dia cumprido conserta um nível de desgaste. Se o desgaste chegar ao fim, a máquina queima e a montagem recomeça do zero.
       </p>
+      <HabitIntro />
 
       {!data && <p className="mt-8 text-muted">Carregando…</p>}
       {data && !data.db && (

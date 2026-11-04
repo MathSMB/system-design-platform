@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { LayoutDashboard, UserRound } from "lucide-react";
+import { Briefcase, Compass, Cpu, LayoutDashboard, Network, UserRound, type LucideIcon } from "lucide-react";
 import { getSession, type Session } from "@sdp/auth";
 import { recentEvents } from "@sdp/events";
 import { APP_LIST, appUrl, profileTitle } from "@sdp/ui";
 import { EventList } from "@/components/EventList";
 
 export const dynamic = "force-dynamic";
+
+/** Um ícone para cada app, o mesmo do topo da página dele. */
+const ICON: Record<string, LucideIcon> = { "system-design": Network, entrevista: Briefcase, estudos: Compass, habito: Cpu };
 
 /** Classes fixas por cor (o Tailwind só gera classes que aparecem inteiras no código). */
 const TONE: Record<string, { text: string; hover: string }> = {
@@ -64,10 +67,14 @@ export default async function Painel() {
       <div className="mt-8 grid gap-4 md:grid-cols-2">
         {APP_LIST.filter((a) => a.id !== "painel").map((a) => (
           <a key={a.id} href={appUrl(a.id)} className={`panel group flex flex-col gap-3 p-6 transition-shadow ${TONE[a.color]!.hover}`}>
-            <div className="flex items-baseline justify-between gap-3">
-              <span className={`font-display text-sm leading-relaxed ${TONE[a.color]!.text} glow`}>{a.title}</span>
+            <div className="flex items-start justify-between gap-3">
+              {(() => {
+                const Icon = ICON[a.id]!;
+                return <Icon size={40} strokeWidth={1.75} className={`${TONE[a.color]!.text} transition-transform group-hover:scale-110`} style={{ filter: `drop-shadow(0 0 10px var(--${a.color}))` }} />;
+              })()}
               <span className="font-mono text-[11px] text-muted">:{a.port}</span>
             </div>
+            <span className={`font-display text-sm leading-relaxed ${TONE[a.color]!.text} glow`}>{a.title}</span>
             <p className="text-sm text-muted">{a.body}</p>
             <span className="mt-auto font-mono text-xs text-muted">Abrir →</span>
           </a>

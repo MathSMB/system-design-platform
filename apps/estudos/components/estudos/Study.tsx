@@ -25,6 +25,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type SessionData, appUrl } from "@sdp/ui";
 import { StudyChat } from "./StudyChat";
+import { StudyIntro } from "./Intro";
 
 export interface CenterData {
   role: string;
@@ -98,6 +99,7 @@ export function Study() {
       <p className="mt-3 max-w-3xl text-muted">
         A IA pesquisa as vagas do cargo que você busca, mostra o que mais pedem, sugere projetos e monta o seu cronograma em blocos curtos, com revisão espaçada. Você junta a pós, a certificação e o livro que está lendo, conversando com ela.
       </p>
+      <StudyIntro />
 
       {!data && <p className="mt-8 text-muted">Carregando…</p>}
       {data && !data.db && <div className="panel mt-8 p-4 text-sm text-muted">O banco não abriu. Reinicie o <code className="text-text">pnpm dev</code> e veja o terminal.</div>}
