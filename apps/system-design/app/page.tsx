@@ -6,6 +6,7 @@ import { RACE_INTERVIEWS } from "@sdp/race-sim";
 import { RACE_LESSONS } from "@/lib/concurrency/lessons";
 import { CASES } from "@/lib/training/cases";
 import { CHALLENGES } from "@/lib/training/challenges";
+import { getSession } from "@sdp/auth";
 
 const MODES = [
   {
@@ -38,7 +39,18 @@ const TONE = {
   "accent-2": { hover: "hover:border-accent-2 hover:shadow-[0_0_28px_rgba(255,60,172,0.3)]", text: "text-accent-2" },
 } as const;
 
-export default function Home() {
+/** Quem está logado; sem banco, ninguém. */
+async function loggedIn() {
+  try {
+    return !!(await getSession());
+  } catch {
+    return false;
+  }
+}
+
+export default async function Home() {
+  // sem conta: só a apresentação e o botão de entrar; os modos aparecem depois do login
+  const logged = await loggedIn();
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
       <div className="flex flex-wrap items-center justify-between gap-8">
@@ -56,6 +68,8 @@ export default function Home() {
 
       <SdIntro />
 
+      {logged && (
+      <>
       <h2 id="comecar" className="hud-label mt-10 scroll-mt-20">Escolha como quer treinar hoje</h2>
       <div className="mt-3 grid gap-5 md:grid-cols-2">
         {MODES.map(({ href, title, Icon, tone, body, areas }) => (
@@ -104,6 +118,8 @@ export default function Home() {
           </Link>
         </div>
       </section>
+      </>
+      )}
     </main>
   );
 }

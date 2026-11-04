@@ -282,7 +282,7 @@ export function SdIntro() {
     <AppIntro
       app="system-design"
       start={{ label: "Começar a treinar", href: "/#comecar" }}
-      openWithoutAccount
+      requireLogin
       id="system-design"
       tone="accent"
       name="o System Design"

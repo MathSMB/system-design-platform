@@ -69,6 +69,7 @@ export function AppIntro({
   app,
   start,
   openWithoutAccount = false,
+  requireLogin = false,
   id,
   tone,
   name,
@@ -87,6 +88,8 @@ export function AppIntro({
   start: { label: string; href: string };
   /** O app funciona sem conta (mostra também "Testar sem conta"). */
   openWithoutAccount?: boolean;
+  /** Sem conta, a apresentação fica sempre aberta (é a página de entrada do app). */
+  requireLogin?: boolean;
   /** Chave para lembrar se a pessoa já viu (ex. "habito"). */
   id: string;
   tone: IntroTone;
@@ -137,7 +140,9 @@ export function AppIntro({
   const onStart = start.href.endsWith("#comecar") ? goStart : undefined;
   const startBtn = <StartButtons app={app} start={start} tone={tone} openWithoutAccount={openWithoutAccount} onStart={onStart} />;
   const landing = children != null;
-  if (!open)
+  const session = useSession();
+  const locked = requireLogin && session === null;
+  if (!open && !locked)
     return (
       <div className={`panel mt-6 flex flex-wrap items-center gap-3 px-4 py-3 text-sm transition-colors ${t.hover}`}>
         <button onClick={reopen} className="group flex min-w-0 flex-1 items-center gap-3 text-left">
@@ -176,11 +181,13 @@ export function AppIntro({
       {landing && (
         <IntroCtx.Provider value={{ app, start, tone, openWithoutAccount, onStart }}>
           {children}
-          <div className="flex justify-center border-t border-border p-4">
-            <button onClick={close} className="text-[12px] uppercase tracking-[0.14em] text-muted hover:text-text">
-              Entendi, esconder a apresentação
-            </button>
-          </div>
+          {!locked && (
+            <div className="flex justify-center border-t border-border p-4">
+              <button onClick={close} className="text-[12px] uppercase tracking-[0.14em] text-muted hover:text-text">
+                Entendi, esconder a apresentação
+              </button>
+            </div>
+          )}
         </IntroCtx.Provider>
       )}
 
