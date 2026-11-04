@@ -142,6 +142,8 @@ export function AppIntro({
   const landing = children != null;
   const session = useSession();
   const locked = requireLogin && session === null;
+  // login obrigatório: a landing é só para quem não entrou; quem entrou vê direto o app
+  if (requireLogin && session !== null) return null;
   if (!open && !locked)
     return (
       <div className={`panel mt-6 flex flex-wrap items-center gap-3 px-4 py-3 text-sm transition-colors ${t.hover}`}>

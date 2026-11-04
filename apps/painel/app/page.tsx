@@ -53,8 +53,8 @@ export default async function Painel() {
               Olá, <span className="font-semibold text-ok">{session.user.name}</span>
               {session.profile ? <span className="text-muted"> · perfil ativo: {profileTitle(session.profile)}</span> : <span className="text-muted"> · sem perfil ainda</span>}
             </span>
-            <Link href="/conta" className="btn-ghost ml-auto px-3 py-1 text-xs">
-              Conta e perfis
+            <Link href="/conta" className={`ml-auto ${session.profile ? "btn-ghost px-3 py-1" : "btn-neon px-4 py-2"} text-xs`}>
+              {session.profile ? "Conta e perfis" : "Criar o meu primeiro perfil ▶"}
             </Link>
           </div>
         ) : (
