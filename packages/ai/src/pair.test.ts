@@ -34,7 +34,7 @@ describe("pair programming", () => {
     expect(p).toContain("1. Instalar o IntelliJ (feito)");
     expect(p).toContain("Resumo do começo da conversa");
     expect(p).toContain("C:\\projetos\\tarefas");
-    expect(p).toContain("Trilha ligada nos Estudos");
+    expect(p).toContain("Projeto ligado nos Estudos");
     // sem pasta: pede a saída dos comandos
     expect(buildPairPrompt(base)).toContain("Você não tem acesso à pasta");
   });

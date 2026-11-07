@@ -1,7 +1,7 @@
 "use client";
 
 import { appUrl, profileTitle, useSession } from "@sdp/ui";
-import { AlertTriangle, ChevronDown, ChevronRight, FolderGit2, FolderOpen, Loader2, MessageSquarePlus, Play, RefreshCw, Search, Send, Settings2, Trash2, Turtle, Users, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, FolderGit2, FolderOpen, FolderPlus, GitBranch, Plus, Loader2, MessageSquarePlus, Play, RefreshCw, Search, Send, Settings2, Trash2, Turtle, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PairIntro } from "./Intro";
@@ -15,12 +15,14 @@ interface ChatRow {
   total: number;
   pending: boolean;
   updatedAt: string;
+  trailId: string | null;
 }
 interface Setup {
   goal: string;
   stack: string;
   trailId?: string;
   folder?: string;
+  repo?: string;
 }
 interface Chat {
   id: string;
@@ -45,6 +47,8 @@ interface TrailOpt {
   project: boolean;
   repo: string | null;
   pct: number;
+  done: number;
+  total: number;
 }
 
 const json = (method: string, body: unknown) => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -128,6 +132,8 @@ function Workspace() {
   const [err, setErr] = useState("");
   const [canRetry, setCanRetry] = useState(false);
   const [dbDown, setDbDown] = useState(false);
+  const [attach, setAttach] = useState(false);
+  const { trails, reload: reloadTrails } = useTrails();
 
   const list = useCallback(async () => {
     const r = await call("/api/pair/conversas");
@@ -142,6 +148,7 @@ function Workspace() {
   const open = useCallback(async (id: string | null) => {
     setErr("");
     setCanRetry(false);
+    setAttach(false);
     if (!id) {
       setChat(null);
       setMsgs([]);
@@ -196,15 +203,36 @@ function Workspace() {
     list();
   }
 
-  async function start(s: Setup) {
+  async function start(s: Setup, first?: string) {
     setErr("");
+    setAttach(false);
     const r = await call("/api/pair/conversas", json("POST", s));
     if (!r.ok) return setErr(r.body.error ?? "Não consegui abrir a conversa.");
     const c: Chat = r.body.chat;
     setChat(c);
     setMsgs([]);
     await list();
-    await send(`${s.goal}${s.stack ? `\n\nStack: ${s.stack}` : ""}`, false, c);
+    await send(first ?? `${s.goal}${s.stack ? `\n\nStack: ${s.stack}` : ""}`, false, c);
+  }
+
+  /** Projeto da lateral: volta para a última conversa dele, ou abre uma nova já ligada a ele. */
+  async function project(t: TrailOpt, fresh = false) {
+    const last = fresh ? null : chats?.find((c) => c.trailId === t.id);
+    if (last) return open(last.id);
+    await start({ goal: `Construir o projeto "${t.title}"`, stack: "", trailId: t.id }, kickoff(t.title));
+  }
+
+  /** Acoplar um projeto novo: vira projeto nos Estudos e a conversa já começa ligada a ele. */
+  async function attachNew(p: { title: string; goal: string; steps: string; stack: string; repo: string; folder: string }): Promise<string | null> {
+    const r = await call("/api/pair/projetos", json("POST", p));
+    if (!r.ok) return r.body.error ?? "Não consegui acoplar o projeto.";
+    const c: Chat = r.body.chat;
+    setAttach(false);
+    setChat(c);
+    setMsgs([]);
+    await Promise.all([list(), reloadTrails()]);
+    await send(kickoff(p.title), false, c);
+    return null;
   }
 
   async function remove(id: string) {
@@ -223,9 +251,23 @@ function Workspace() {
 
   return (
     <div className="mt-6 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <Sidebar chats={chats} current={chat?.id ?? null} onOpen={open} onRemove={remove} />
+      <Sidebar
+        chats={chats}
+        current={attach ? "acoplar" : (chat?.id ?? null)}
+        onOpen={open}
+        onRemove={remove}
+        projects={trails?.filter((t) => t.project) ?? null}
+        currentTrail={chat?.setup.trailId ?? null}
+        onProject={project}
+        onAttach={() => {
+          setChat(null);
+          setAttach(true);
+        }}
+      />
       <section className="min-w-0">
-        {chat ? (
+        {attach ? (
+          <AttachProject onAttach={attachNew} onCancel={() => setAttach(false)} />
+        ) : chat ? (
           <ChatView
             chat={chat}
             msgs={msgs}
@@ -247,7 +289,28 @@ function Workspace() {
   );
 }
 
-function Sidebar({ chats, current, onOpen, onRemove }: { chats: ChatRow[] | null; current: string | null; onOpen(id: string | null): void; onRemove(id: string): void }) {
+const kickoff = (title: string) =>
+  `Quero construir o projeto "${title}" aprendendo os conceitos pelo caminho. Você já tem o que ele precisa ter: monte o roteiro a partir disso, comece do primeiro passo e me explique cada fundamento.`;
+
+function Sidebar({
+  chats,
+  current,
+  onOpen,
+  onRemove,
+  projects,
+  currentTrail,
+  onProject,
+  onAttach,
+}: {
+  chats: ChatRow[] | null;
+  current: string | null;
+  onOpen(id: string | null): void;
+  onRemove(id: string): void;
+  projects: TrailOpt[] | null;
+  currentTrail: string | null;
+  onProject(t: TrailOpt, fresh?: boolean): void;
+  onAttach(): void;
+}) {
   const groups: { day: string; items: ChatRow[] }[] = [];
   for (const c of chats ?? []) {
     const g = groups.find((x) => x.day === c.day);
@@ -288,16 +351,56 @@ function Sidebar({ chats, current, onOpen, onRemove }: { chats: ChatRow[] | null
           </div>
         ))}
       </div>
+
+      {/* projetos acoplados: o mentor já sabe o que cada um precisa */}
+      <div id="pair-projetos" className="flex max-h-[45%] shrink-0 flex-col border-t border-border">
+        <div className="flex items-center justify-between px-4 pb-1 pt-3">
+          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-warn">
+            <FolderGit2 size={12} /> Projetos
+          </span>
+          <button onClick={onAttach} title="Acoplar um projeto" className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition-colors ${current === "acoplar" ? "border-warn text-warn" : "border-border text-muted hover:border-warn hover:text-warn"}`}>
+            <FolderPlus size={12} /> Acoplar
+          </button>
+        </div>
+        <div className="no-scrollbar overflow-y-auto px-2 pb-3">
+          {projects === null && <p className="px-2 text-[12px] text-muted">Carregando…</p>}
+          {projects?.length === 0 && <p className="px-2 py-1 text-[12px] text-muted">Acople um projeto (seu, ou um que a IA sugeriu nos Estudos) e o mentor já começa sabendo o que precisa ser feito.</p>}
+          <ul className="flex flex-col gap-0.5">
+            {projects?.map((t) => (
+              <li key={t.id} className="group relative">
+                <button
+                  onClick={() => onProject(t)}
+                  title="Abrir a conversa deste projeto"
+                  className={`flex w-full flex-col rounded-md px-2 py-1.5 pr-7 text-left text-[13px] transition-colors ${t.id === currentTrail && current !== "acoplar" ? "bg-warn/10 text-text" : "text-muted hover:bg-panel-2 hover:text-text"}`}
+                >
+                  <span className="line-clamp-2">{t.title}</span>
+                  <span className="mt-1 flex items-center gap-2 font-mono text-[10px] text-muted">
+                    {t.repo && <GitBranch size={10} />}
+                    {t.total ? `${t.done}/${t.total} entregas` : "sem passos ainda"}
+                    <span className="h-1 flex-1 overflow-hidden rounded-full bg-bg">
+                      <span className="block h-full rounded-full bg-warn" style={{ width: `${Math.max(t.pct, 2)}%` }} />
+                    </span>
+                  </span>
+                </button>
+                <button onClick={() => onProject(t, true)} title="Nova conversa sobre este projeto" className="absolute right-1.5 top-2 hidden text-muted hover:text-warn group-hover:block">
+                  <Plus size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </aside>
   );
 }
 
 function useTrails() {
   const [trails, setTrails] = useState<TrailOpt[] | null>(null);
+  const reload = useCallback(() => call("/api/pair/estudos").then((r) => setTrails(r.body.trails ?? [])), []);
   useEffect(() => {
-    call("/api/pair/estudos").then((r) => setTrails(r.body.trails ?? []));
-  }, []);
-  return trails;
+    reload();
+  }, [reload]);
+  return { trails, reload };
 }
 
 function NewChat({ onStart, err }: { onStart(s: Setup): Promise<void>; err: string }) {
@@ -307,7 +410,7 @@ function NewChat({ onStart, err }: { onStart(s: Setup): Promise<void>; err: stri
   const [folder, setFolder] = useState("");
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
-  const trails = useTrails();
+  const { trails } = useTrails();
 
   function pickTrail(id: string) {
     setTrailId(id);
@@ -569,7 +672,7 @@ function ChatSettings({ chat, onChat, onClose }: { chat: Chat; onChat(c: Chat): 
   const [folder, setFolder] = useState(chat.setup.folder ?? "");
   const [trailId, setTrailId] = useState(chat.setup.trailId ?? "");
   const [msg, setMsg] = useState("");
-  const trails = useTrails();
+  const { trails } = useTrails();
   async function save() {
     const r = await call("/api/pair/conversas", json("PATCH", { id: chat.id, folder: folder.trim(), trailId }));
     if (!r.ok) return setMsg(r.body.error ?? "Não deu para salvar.");
@@ -602,6 +705,72 @@ function ChatSettings({ chat, onChat, onClose }: { chat: Chat; onChat(c: Chat): 
         </button>
       </div>
       {msg && <p className="text-[12px] text-muted md:col-span-3">{msg}</p>}
+    </div>
+  );
+}
+
+function AttachProject({ onAttach, onCancel }: { onAttach(p: { title: string; goal: string; steps: string; stack: string; repo: string; folder: string }): Promise<string | null>; onCancel(): void }) {
+  const [f, setF] = useState({ title: "", goal: "", steps: "", stack: "", repo: "", folder: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  async function go() {
+    if (busy) return;
+    setBusy(true);
+    setErr((await onAttach({ ...f, title: f.title.trim(), goal: f.goal.trim() })) ?? "");
+    setBusy(false);
+  }
+  return (
+    <div id="pair-acoplar" className="panel flex flex-col gap-5 p-5 sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-sm leading-relaxed text-warn">Acoplar um projeto</h2>
+          <p className="mt-2 text-sm text-muted">
+            Um projeto seu ou um que a IA sugeriu. Ele entra nos Estudos e o mentor já começa sabendo o que precisa ser feito, ensinando os conceitos de cada passo.
+          </p>
+        </div>
+        <button onClick={onCancel} title="Fechar" className="p-1 text-muted hover:text-text">
+          <X size={16} />
+        </button>
+      </div>
+      <label className="flex flex-col gap-1.5">
+        <span className="hud-label">Nome do projeto</span>
+        <input value={f.title} onChange={set("title")} placeholder="Ex.: API de pagamentos com Kafka" className="text-[14px]" />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="hud-label">O que ele precisa ter ou fazer</span>
+        <textarea value={f.goal} onChange={set("goal")} rows={3} placeholder="Ex.: uma API REST de transferências entre contas, com Postgres, eventos no Kafka e testes. Quero aprender Spring Boot e mensageria fazendo." className="resize-y text-[14px]" />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="hud-label">Entregas ou passos (opcional, um por linha)</span>
+        <textarea value={f.steps} onChange={set("steps")} rows={5} placeholder={"API de transferências com Spring Boot\nPostgres e migrações\nEvento no Kafka com idempotência\nTestes com Testcontainers"} className="resize-y font-mono text-[12px]" />
+        <span className="text-[12px] text-muted">Em branco, o mentor monta o roteiro a partir do que você contou.</span>
+      </label>
+      <div className="grid gap-4 md:grid-cols-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="hud-label">Stack (opcional)</span>
+          <input value={f.stack} onChange={set("stack")} placeholder="Java + Spring Boot" className="text-[13px]" />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="hud-label flex items-center gap-1.5">
+            <GitBranch size={11} /> Repositório (opcional)
+          </span>
+          <input value={f.repo} onChange={set("repo")} placeholder="github.com/voce/projeto" className="font-mono text-[12px]" />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="hud-label flex items-center gap-1.5">
+            <FolderOpen size={11} /> Pasta no computador (opcional)
+          </span>
+          <input value={f.folder} onChange={set("folder")} placeholder="C:\Users\voce\projetos\api" className="font-mono text-[12px]" />
+        </label>
+      </div>
+      {err && <p className="text-sm text-down">{err}</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={go} disabled={busy || !f.title.trim() || !f.goal.trim()} className="btn-neon px-6 py-3 text-xs disabled:opacity-50" style={{ background: "var(--warn)", color: "#1a1600" }}>
+          {busy ? "Acoplando…" : "Acoplar e começar ▶"}
+        </button>
+        <span className="text-[12px] text-muted">Os projetos dos Estudos (seus ou sugeridos pela IA) já aparecem na lateral.</span>
+      </div>
     </div>
   );
 }

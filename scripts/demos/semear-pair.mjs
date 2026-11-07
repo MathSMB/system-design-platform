@@ -118,6 +118,14 @@ async function chat({ title, d, setup, plan, step, summary, msgs }) {
   return c.id;
 }
 
+// um projeto acoplado pelo próprio Pair Programming (aparece em "Projetos" na lateral, ao lado dos dos Estudos)
+const [center] = await sql`select trails from study_centers where profile_id = ${pid}`;
+if (center) {
+  const trails = (center.trails ?? []).filter((t) => t.id !== "tencurta");
+  trails.push({ id: "tencurta", kind: "projeto", title: "Encurtador de URL com Redis", why: "Um encurtador com Spring Boot e cache no Redis, para aprender cache e alta leitura fazendo.", importance: 3, perWeek: 3, sessionMin: 30, hours: 20, deadline: null, skills: ["Spring Boot", "Redis"], units: ["Endpoint para encurtar", "Redirecionar pelo código", "Cache no Redis", "Contador de acessos"].map((title, i) => ({ id: `u${i + 1}`, title, done: i === 0 })) });
+  await sql`update study_centers set trails = ${sql.json(trails)} where profile_id = ${pid}`;
+}
+
 await sql`delete from pair_messages where chat_id in (select id from pair_chats where profile_id = ${pid})`;
 await sql`delete from pair_chats where profile_id = ${pid}`;
 

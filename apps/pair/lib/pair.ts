@@ -3,7 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import type { ChatMessage, PairSetup } from "@sdp/ai";
 import type { Session } from "@sdp/auth";
 import { pairChats, pairMessages, studyCenters, type Db, type PairChat, type PairMessage } from "@sdp/db";
-import { cleanTrails, kindOf, type Trail } from "@sdp/study";
+import { MAX_TRAILS, cleanTrail, cleanTrails, kindOf, type Trail } from "@sdp/study";
 import { and, asc, desc, eq } from "drizzle-orm";
 
 /** Quantas mensagens vão inteiras para a IA; as mais antigas vão no resumo. */
@@ -21,6 +21,8 @@ export interface StoredSetup {
   trailId?: string;
   /** Pasta do projeto no computador (opcional). */
   folder?: string;
+  /** Repositório no GitHub ("dono/repo"), quando o projeto foi acoplado com o link. */
+  repo?: string;
 }
 
 const str = (x: unknown, n: number) => (typeof x === "string" ? x.trim().slice(0, n) : "");
@@ -29,12 +31,21 @@ export function cleanSetup(x: unknown): StoredSetup {
   const o = (x ?? {}) as Record<string, unknown>;
   const trailId = str(o.trailId, 20);
   const folder = str(o.folder, 400);
+  const repo = repoOf(o.repo);
   return {
     goal: str(o.goal, 1500),
     stack: str(o.stack, 120),
     ...(/^t[a-z0-9]{1,16}$/.test(trailId) ? { trailId } : {}),
     ...(folder ? { folder } : {}),
+    ...(repo ? { repo } : {}),
   };
+}
+
+/** "https://github.com/dono/repo(.git)" ou "dono/repo" → "dono/repo". */
+export function repoOf(x: unknown): string {
+  const s = str(x, 200).replace(/\.git$/, "").replace(/\/+$/, "");
+  const m = s.match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+)/i) ?? s.match(/^([\w.-]+)\/([\w.-]+)$/);
+  return m ? `${m[1]}/${m[2]}` : "";
 }
 
 /** A pasta existe neste computador? (o app roda local, então é o computador dele) */
@@ -57,12 +68,12 @@ export const chatMessages = (db: Db, chatId: string) => db.select().from(pairMes
 
 export async function chatList(db: Db, profileId: string) {
   const rows = await db
-    .select({ id: pairChats.id, title: pairChats.title, day: pairChats.day, plan: pairChats.plan, step: pairChats.step, updatedAt: pairChats.updatedAt, pendingSince: pairChats.pendingSince })
+    .select({ id: pairChats.id, title: pairChats.title, day: pairChats.day, plan: pairChats.plan, step: pairChats.step, setup: pairChats.setup, updatedAt: pairChats.updatedAt, pendingSince: pairChats.pendingSince })
     .from(pairChats)
     .where(eq(pairChats.profileId, profileId))
     .orderBy(desc(pairChats.updatedAt))
     .limit(100);
-  return rows.map(({ plan, pendingSince, ...r }) => ({ ...r, total: Array.isArray(plan) ? plan.length : 0, pending: pending(pendingSince) }));
+  return rows.map(({ plan, pendingSince, setup, ...r }) => ({ ...r, trailId: cleanSetup(setup).trailId ?? null, total: Array.isArray(plan) ? plan.length : 0, pending: pending(pendingSince) }));
 }
 
 /** Para a tela: a conversa sem os campos internos. */
@@ -116,6 +127,7 @@ export async function setupFor(db: Db, s: Session, stored: StoredSetup): Promise
   const who = [u.jobTitle, u.experience ? EXPERIENCE[u.experience] : "", s.profile ? `treina para ${s.profile.stack} ${s.profile.level}` : ""].filter(Boolean).join(", ");
   const out: PairSetup = { goal: stored.goal, stack: stored.stack || undefined, os: "Windows", who: who || undefined };
   if (stored.folder && folderExists(stored.folder)) out.folder = stored.folder;
+  if (stored.repo) out.repo = stored.repo;
   if (s.profile && stored.trailId) {
     const st = await studyTrails(db, s.profile.id);
     const t = st.trails.find((x) => x.id === stored.trailId);
@@ -127,6 +139,22 @@ export async function setupFor(db: Db, s: Session, stored: StoredSetup): Promise
     out.learning = Object.entries(st.skills).filter(([, v]) => v === 1).map(([k]) => k).slice(0, 20);
   }
   return out;
+}
+
+/** A primeira mensagem de uma conversa sobre um projeto: o mentor já tem os passos dele no contexto. */
+export const projectKickoff = (title: string) =>
+  `Quero construir o projeto "${title}" aprendendo os conceitos pelo caminho. Você já tem o que ele precisa ter: monte o roteiro a partir disso, comece do primeiro passo e me explique cada fundamento.`;
+
+/** Acopla um projeto aos Estudos (vira uma trilha de projeto, com as entregas como passos). */
+export async function attachProject(db: Db, profileId: string, p: { title: string; why: string; steps: string[]; skills: string[] }): Promise<Trail | null> {
+  const [row] = await db.select({ trails: studyCenters.trails }).from(studyCenters).where(eq(studyCenters.profileId, profileId));
+  const trails = cleanTrails(row?.trails);
+  if (trails.length >= MAX_TRAILS) return null;
+  const trail = cleanTrail({ kind: "projeto", title: p.title, why: p.why, importance: 3, skills: p.skills, units: p.steps }, `t${Date.now().toString(36)}`)!;
+  const next = [...trails, trail];
+  if (row) await db.update(studyCenters).set({ trails: next, updatedAt: new Date() }).where(eq(studyCenters.profileId, profileId));
+  else await db.insert(studyCenters).values({ profileId, trails: next });
+  return trail;
 }
 
 /** O que vai para a IA: o resumo (quando a conversa é longa) e só as mensagens recentes. */

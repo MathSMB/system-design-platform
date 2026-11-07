@@ -13,6 +13,7 @@ Decisão do Matheus (07/11/2026): o app é **100% IA**. Não há guia pronto nem
 - **Sem conta:** a landing (vídeo com legendas, seções com prints). Entrar sempre leva ao Painel.
 - **Nova conversa** (`#pair-nova`): o que quer construir (com 4 ideias de exemplo), linguagem/stack (chips ou texto livre) e, recolhido em "Ligar aos Estudos e à pasta do projeto (opcional)", a trilha dos Estudos e a pasta do projeto no computador.
 - **Conversas** (`#pair-conversas`): lista agrupada por dia (Hoje, Ontem, dd/mm), com "passo N de M". Apagar no hover.
+- **Projetos** (`#pair-projetos`, embaixo das conversas): os projetos dos Estudos (feitos à mão, sugeridos pela IA ou acoplados aqui), com entregas feitas e barra. Clicar abre a última conversa daquele projeto ou começa uma nova já ligada a ele, com a primeira mensagem pedindo o roteiro a partir das entregas; o "+" no hover abre outra conversa. **Acoplar** (`#pair-acoplar`) pede nome, o que o projeto precisa ter, entregas (uma por linha, opcional), stack, repositório e pasta: `POST /api/pair/projetos` grava o projeto como trilha nos Estudos (no máximo 20 trilhas) e abre a conversa.
 - **Conversa** (`#pair-chat`):
   - topo com título, stack, "ligado aos Estudos", "pasta ligada / não encontrada" e o botão de ajustes (pasta e trilha);
   - barra do roteiro: "PASSO 7/12" + título do passo; clicar abre o roteiro inteiro (feitos riscados, atual em amarelo);

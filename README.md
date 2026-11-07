@@ -128,6 +128,7 @@ Um mentor de IA que programa do seu lado como um sênior com um júnior. Você c
 - **Explica o código linha por linha.** Clicar numa linha de qualquer bloco de código pede a explicação dela. Também há **Explica mais devagar**, **Deu erro** e **Confere pra mim**.
 - **Confere o que você fez**, se você informar a pasta do projeto: o Claude Code lê os arquivos e roda só `git status/log/diff/branch` (nada de escrever ou apagar).
 - **Liga aos Estudos, se você quiser:** escolha uma trilha ou projeto e ele já sabe os passos, o repositório, os últimos commits e o que você marcou como "domino".
+- **Projetos na lateral:** embaixo das conversas ficam os projetos dos Estudos (feitos à mão ou sugeridos pela IA). Clicar abre a conversa daquele projeto, e o mentor já monta o roteiro a partir das entregas. O botão **Acoplar** cadastra um projeto novo (nome, o que precisa ter, entregas, repositório e pasta): ele entra nos Estudos e a conversa já começa.
 
 Tudo é IA: não há resposta pronta nem guardada para reaproveitar. O banco guarda só as conversas (`pair_chats` e `pair_messages`), agrupadas por dia, para você continuar de onde parou. Para a IA vão o resumo da conversa (que ela mesma atualiza) e as últimas 10 mensagens. Cada passo concluído grava o evento `pair.passo-concluido`, que conta como avanço no projeto na meta do Hábito.
 

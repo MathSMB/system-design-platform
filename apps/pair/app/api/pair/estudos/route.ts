@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const { trails } = await studyTrails(getDb(), s.profile.id);
     const list = trails
-      .map((t) => ({ id: t.id, title: t.title, kind: kindOf(t.kind).title, project: t.kind === "projeto", repo: t.github?.repo ?? null, pct: trailProgress(t).pct, skills: t.skills }))
+      .map((t) => ({ id: t.id, title: t.title, kind: kindOf(t.kind).title, project: t.kind === "projeto", repo: t.github?.repo ?? null, pct: trailProgress(t).pct, done: trailProgress(t).done, total: t.units.length, skills: t.skills }))
       .sort((a, b) => Number(b.project) - Number(a.project));
     return NextResponse.json({ db: true, trails: list });
   } catch {

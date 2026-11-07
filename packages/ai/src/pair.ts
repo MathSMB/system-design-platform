@@ -110,7 +110,7 @@ export function setupText(s: PairSetup): string {
   if (s.repo) lines.push(`- Repositório no GitHub: https://github.com/${s.repo}`);
   if (s.folder) lines.push(`- Pasta do projeto no computador dela: ${s.folder} (você pode LER essa pasta para conferir o que ela fez; nunca altere nada)`);
   else lines.push("- Você não tem acesso à pasta do projeto: para conferir, peça a saída de um comando ou o conteúdo do arquivo.");
-  return `## A pessoa e o projeto\n${lines.join("\n")}${s.trail ? `\n\n## Trilha ligada nos Estudos\n${s.trail}` : ""}`;
+  return `## A pessoa e o projeto\n${lines.join("\n")}${s.trail ? `\n\n## Projeto ligado nos Estudos (o que precisa ser feito)\nUse as entregas abaixo como base do roteiro: quebre cada uma em passos pequenos e ensine os conceitos que cada uma pede. As marcadas com [x] já foram feitas.\n${s.trail}` : ""}`;
 }
 
 export function buildPairPrompt(i: PairChatInput): string {
