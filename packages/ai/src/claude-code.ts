@@ -1,4 +1,4 @@
-import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext } from "./study";
+import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext, type ChatAttachment } from "./study";
 import { spawn } from "node:child_process";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
@@ -43,7 +43,7 @@ export class ClaudeCodeProvider implements AiProvider {
   }
 
   async studyChat(input: StudyChatInput): Promise<StudyChatReply> {
-    return normalizeChat(await this.json(CHAT_SYSTEM_PROMPT, CHAT_SCHEMA, buildChatPrompt(input), { web: true, timeoutMs: 5 * 60_000 }));
+    return normalizeChat(await this.json(CHAT_SYSTEM_PROMPT, CHAT_SCHEMA, buildChatPrompt(input), { web: true, timeoutMs: 5 * 60_000, attachments: input.attachments }));
   }
 
   async proposeProjects(input: StudyContext): Promise<unknown> {
@@ -54,13 +54,17 @@ export class ClaudeCodeProvider implements AiProvider {
     return normalizeSchedule(await this.json(SCHEDULE_SYSTEM_PROMPT, SCHEDULE_SCHEMA, buildSchedulePrompt(input), { timeoutMs: 6 * 60_000 }));
   }
 
-  /** Roda `claude -p` com saída JSON validada pelo schema. Com web, libera só a busca e a leitura de páginas. */
-  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number } = {}): Promise<unknown> {
+  /**
+   * Roda `claude -p` com saída JSON validada pelo schema. Com web, libera só a busca e a leitura de páginas.
+   * Com anexos, a mensagem vai em stream-json com os blocos de imagem/PDF em base64: a IA vê o arquivo
+   * sem ganhar acesso a nenhuma pasta do computador.
+   */
+  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number; attachments?: ChatAttachment[] } = {}): Promise<unknown> {
+    const files = o.attachments?.length ? o.attachments : null;
     const args = [
       ...(this.opts.binArgs ?? []),
       "-p",
-      "--output-format",
-      "json",
+      ...(files ? ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose"] : ["--output-format", "json"]),
       "--json-schema",
       JSON.stringify(schema),
       "--system-prompt",
@@ -70,9 +74,24 @@ export class ClaudeCodeProvider implements AiProvider {
     ];
     if (this.opts.model) args.push("--model", this.opts.model);
 
-    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, prompt, Math.max(this.opts.timeoutMs ?? 180_000, o.timeoutMs ?? 0));
-    return parseClaudeJson(stdout);
+    const stdin = files ? `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }, ...files.map(attachmentBlock)] } })}\n` : prompt;
+    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, stdin, Math.max(this.opts.timeoutMs ?? 180_000, o.timeoutMs ?? 0));
+    return parseClaudeJson(files ? lastResult(stdout) : stdout);
   }
+}
+
+/** Bloco de conteúdo da mensagem (formato da API) para uma imagem ou um PDF. */
+export function attachmentBlock(a: ChatAttachment) {
+  return a.mime === "application/pdf"
+    ? { type: "document", source: { type: "base64", media_type: a.mime, data: a.data }, title: a.name }
+    : { type: "image", source: { type: "base64", media_type: a.mime, data: a.data } };
+}
+
+/** No stream-json, cada linha é um evento; o resultado final é a linha "result". */
+export function lastResult(stdout: string): string {
+  const lines = stdout.split("\n").filter((l) => l.includes('"type":"result"'));
+  if (!lines.length) throw new Error(`Saída inesperada do Claude Code: ${stdout.slice(-300)}`);
+  return lines[lines.length - 1]!;
 }
 
 export function parseClaudeOutput(stdout: string): Evaluation {

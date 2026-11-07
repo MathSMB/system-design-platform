@@ -3,6 +3,7 @@ import type { StudyContext } from "@sdp/ai";
 import { addDays, dayInBrazil } from "@sdp/habit";
 import { getStack, getTrack, LEVELS, type Level } from "@sdp/hiring";
 import {
+  cleanRoleSpec,
   cleanAvailability,
   cleanProjects,
   cleanSchedule,
@@ -16,7 +17,7 @@ import {
 } from "@sdp/study";
 import { and, desc, eq, gte, like } from "drizzle-orm";
 import type { Db } from "@sdp/db";
-import { checkins, interviewRuns, roleResearch, studyCenters, type Profile } from "@sdp/db";
+import { checkins, interviewRuns, roleResearch, studyCenters, studyResearch, type Profile, type StudyResearchRow } from "@sdp/db";
 
 /** O cargo que o perfil busca: o que você escreveu, ou o nome da vaga da stack. */
 export function roleOf(p: Profile, targetRole?: string | null): string {
@@ -32,9 +33,14 @@ export async function loadCenter(db: Db, p: Profile) {
   if (!row) [row] = await db.insert(studyCenters).values({ profileId: p.id }).onConflictDoNothing().returning();
   if (!row) [row] = await db.select().from(studyCenters).where(eq(studyCenters.profileId, p.id));
   const role = roleOf(p, row!.targetRole);
+  const roleSpec = cleanRoleSpec(row!.roleSpec);
   return {
     role,
     customRole: !!row!.targetRole,
+    roleSpec,
+    /** A senioridade da pesquisa: a do montador de cargo, ou a do perfil. */
+    level: roleSpec?.level ?? p.level,
+    researchId: row!.researchId ?? null,
     availability: cleanAvailability(row!.availability ?? undefined),
     trails: cleanTrails(row!.trails),
     projectOptions: cleanProjects(row!.projectOptions),
@@ -48,10 +54,37 @@ export async function saveCenter(db: Db, profileId: string, patch: Partial<typeo
   await db.update(studyCenters).set({ ...patch, updatedAt: new Date() }).where(eq(studyCenters.profileId, profileId));
 }
 
-/** A pesquisa do cargo (pronta, rodando ou com erro). */
-export async function loadResearch(db: Db, role: string, level: string) {
-  const [row] = await db.select().from(roleResearch).where(eq(roleResearch.id, researchId(role, level)));
-  return row ?? null;
+/** Uma pesquisa "rodando" há mais de 30 min travou (o servidor caiu no meio): pode rodar de novo. */
+export const RESEARCH_STUCK_MS = 30 * 60_000;
+
+/** O histórico de pesquisas do perfil, da mais nova para a mais velha. */
+export async function researchHistory(db: Db, profileId: string): Promise<StudyResearchRow[]> {
+  return db.select().from(studyResearch).where(eq(studyResearch.profileId, profileId)).orderBy(desc(studyResearch.startedAt)).limit(60);
+}
+
+/**
+ * A pesquisa que vale agora: a escolhida para o cronograma, ou a mais nova que terminou.
+ * Na primeira vez, copia para o histórico a pesquisa antiga (de antes do histórico existir).
+ */
+export async function activeResearch(db: Db, p: Profile, c: Center) {
+  let rows = await researchHistory(db, p.id);
+  if (!rows.length) {
+    const [old] = await db.select().from(roleResearch).where(eq(roleResearch.id, researchId(c.role, c.level)));
+    if (old?.status === "done" && old.data) {
+      const [row] = await db
+        .insert(studyResearch)
+        .values({ profileId: p.id, role: old.role, level: old.level, status: "done", data: old.data, startedAt: old.startedAt, researchedAt: old.researchedAt })
+        .returning();
+      await saveCenter(db, p.id, { researchId: row!.id });
+      c.researchId = row!.id;
+      rows = [row!];
+    }
+  }
+  const done = rows.filter((r) => r.status === "done" && r.data);
+  const active = done.find((r) => r.id === c.researchId) ?? done[0] ?? null;
+  const running = rows.find((r) => r.status === "running" && Date.now() - new Date(r.startedAt).getTime() < RESEARCH_STUCK_MS) ?? null;
+  const last = rows[0] ?? null;
+  return { rows, active, running, lastError: last?.status === "error" ? last.error : null, data: (active?.data as RoleResearch | undefined) ?? null };
 }
 
 /** Marcas do cronograma por dia (itens "c:<id>"), desde um dia. */
@@ -85,7 +118,7 @@ export async function contextOf(db: Db, p: Profile, c: Center, research: RoleRes
   const lv = skillLevels(skills, c.skillStatus, practiced(c, checks));
   return {
     role: c.role,
-    level: p.level,
+    level: c.level,
     today: dayInBrazil(),
     skills: skills.map((s) => ({ ...s, level: lv[s.name] ?? 0 })),
     trails: c.trails,
