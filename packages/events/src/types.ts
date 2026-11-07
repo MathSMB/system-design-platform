@@ -1,5 +1,5 @@
 /** Os apps que gravam eventos. */
-export const APPS = ["painel", "system-design", "entrevista", "estudos", "habito"] as const;
+export const APPS = ["painel", "system-design", "entrevista", "estudos", "habito", "pair"] as const;
 export type AppId = (typeof APPS)[number];
 
 /**
@@ -15,6 +15,7 @@ export const EVENT_TYPES = {
   "projeto.commits": "Commits novos num projeto de portfólio ligado ao GitHub",
   "projeto.passo-concluido": "Um passo de um projeto de portfólio foi concluído",
   "projeto.analisado": "A IA analisou os commits novos de um projeto de portfólio",
+  "pair.passo-concluido": "Um passo de uma sessão de pair programming foi concluído",
 } as const;
 export type EventType = keyof typeof EVENT_TYPES;
 
@@ -36,6 +37,7 @@ export const ACTIVITY_OF: Partial<Record<EventType, "answer" | "stage" | "proces
   "design.avaliado": "design",
   "projeto.commits": "project",
   "projeto.passo-concluido": "project",
+  "pair.passo-concluido": "project",
 };
 
 /** Confere o corpo de um POST /api/eventos. Volta o evento limpo ou a mensagem de erro. */
@@ -64,6 +66,8 @@ export function describeEvent(type: string, payload: unknown): string {
       return text("step") ? `Passo concluído${repoName ? ` em ${repoName}` : ""}: ${text("step")}` : EVENT_TYPES[type];
     case "projeto.analisado":
       return repoName ? `IA analisou ${repoName}${p.relevant === false ? " (ajuste pequeno)" : ""}` : EVENT_TYPES[type];
+    case "pair.passo-concluido":
+      return text("step") ? `Pair programming: ${text("step")}${text("title") ? ` (${text("title")})` : ""}` : EVENT_TYPES[type];
     case "estudo.item-feito":
       return text("title") ? `Bloco do cronograma feito: ${text("title")}` : EVENT_TYPES[type];
     default:

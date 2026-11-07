@@ -9,6 +9,7 @@
     "dev:entrevista": "node scripts/preparar.mjs && turbo run dev --filter=entrevista",
     "dev:estudos": "node scripts/preparar.mjs && turbo run dev --filter=estudos",
     "dev:habito": "node scripts/preparar.mjs && turbo run dev --filter=habito",
+    "dev:pair": "node scripts/preparar.mjs && turbo run dev --filter=pair",
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",

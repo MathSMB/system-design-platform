@@ -1,6 +1,6 @@
 import { PlatformLanding } from "@/components/PlatformLanding";
 import Link from "next/link";
-import { Briefcase, Compass, Cpu, LayoutDashboard, Network, UserRound, type LucideIcon } from "lucide-react";
+import { Briefcase, Compass, Cpu, LayoutDashboard, Network, UserRound, Users, type LucideIcon } from "lucide-react";
 import { getSession, type Session } from "@sdp/auth";
 import { recentEvents } from "@sdp/events";
 import { APP_LIST, appUrl, profileTitle } from "@sdp/ui";
@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 export const dynamic = "force-dynamic";
 
 /** Um ícone para cada app, o mesmo do topo da página dele. */
-const ICON: Record<string, LucideIcon> = { "system-design": Network, entrevista: Briefcase, estudos: Compass, habito: Cpu };
+const ICON: Record<string, LucideIcon> = { "system-design": Network, entrevista: Briefcase, estudos: Compass, habito: Cpu, pair: Users };
 
 /** Classes fixas por cor (o Tailwind só gera classes que aparecem inteiras no código). */
 const TONE: Record<string, { text: string; hover: string }> = {
@@ -20,6 +20,7 @@ const TONE: Record<string, { text: string; hover: string }> = {
   "accent-2": { text: "text-accent-2", hover: "hover:border-accent-2 hover:shadow-[0_0_24px_rgba(255,60,172,0.3)]" },
   bad: { text: "text-bad", hover: "hover:border-bad hover:shadow-[0_0_24px_rgba(255,154,60,0.35)]" },
   ok: { text: "text-ok", hover: "hover:border-ok hover:shadow-[0_0_24px_rgba(57,255,143,0.3)]" },
+  warn: { text: "text-warn", hover: "hover:border-warn hover:shadow-[0_0_24px_rgba(255,225,77,0.3)]" },
 };
 
 export default async function Painel() {
@@ -37,7 +38,7 @@ export default async function Painel() {
   } catch {
     dbUp = false;
   }
-  // sem conta, o endereço do Painel mostra a página da plataforma (os quatro apps)
+  // sem conta, o endereço do Painel mostra a página da plataforma (os cinco apps)
   if (dbUp && !session) return <PlatformLanding />;
   return (
     <main className="mx-auto max-w-5xl px-4 py-12">
@@ -50,7 +51,7 @@ export default async function Painel() {
       <p className="mt-3 max-w-2xl text-muted">
         Cada parte da plataforma é um app separado, na sua porta. A conta é uma só: entrando aqui, você já está dentro de todos.{" "}
         <Link href="/sobre" className="text-accent underline-offset-4 hover:underline">
-          Como os quatro se completam
+          Como os cinco se completam
         </Link>
       </p>
 
@@ -81,8 +82,8 @@ export default async function Painel() {
       </section>
 
       <div className="mt-8 grid gap-4 md:grid-cols-2">
-        {APP_LIST.filter((a) => a.id !== "painel").map((a) => (
-          <a key={a.id} href={appUrl(a.id)} className={`panel group flex flex-col gap-3 p-6 transition-shadow ${TONE[a.color]!.hover}`}>
+        {APP_LIST.filter((a) => a.id !== "painel").map((a, i, all) => (
+          <a key={a.id} href={appUrl(a.id)} className={`panel group flex flex-col gap-3 p-6 transition-shadow ${i === all.length - 1 && all.length % 2 ? "md:col-span-2" : ""} ${TONE[a.color]!.hover}`}>
             <div className="flex items-start justify-between gap-3">
               {(() => {
                 const Icon = ICON[a.id]!;

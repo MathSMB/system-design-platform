@@ -26,6 +26,7 @@ A plataforma é um monorepo com um app por parte. Cada um roda na sua porta, mas
 | Entrevista (`apps/entrevista`) | 3002 | Processo seletivo por área, stack e senioridade (do RH à contratação), treino Java e o histórico |
 | Estudos (`apps/estudos`) | 3003 | Central de estudos: pesquisa da vaga, trilhas, projetos e cronograma |
 | Hábito (`apps/habito`) | 3004 | A placa-mãe neon da meta diária |
+| Pair Programming (`apps/pair`) | 3005 | Um mentor de IA que programa com você passo a passo: ambiente, Git e código linha por linha |
 
 Os apps não precisam estar abertos juntos. O que acontece em um (uma resposta avaliada, uma etapa do processo, um desenho avaliado) vira um **evento** gravado no banco, e quem precisa lê depois: o Hábito, por exemplo, conta esses eventos para a meta do dia quando você abre a placa-mãe.
 
@@ -35,7 +36,7 @@ Pré-requisitos: Node 22+, pnpm (`corepack enable`) e o **Docker Desktop** abert
 
 ```bash
 pnpm install
-pnpm dev                  # sobe o Postgres no Docker, cria as tabelas e abre os 5 apps
+pnpm dev                  # sobe o Postgres no Docker, cria as tabelas e abre os 6 apps
 ```
 
 Abra o Painel em http://localhost:3000. Para abrir um app só:
@@ -46,6 +47,7 @@ pnpm dev:system-design    # http://localhost:3001
 pnpm dev:entrevista       # http://localhost:3002
 pnpm dev:estudos          # http://localhost:3003
 pnpm dev:habito           # http://localhost:3004
+pnpm dev:pair             # http://localhost:3005
 ```
 
 Configuração (opcional): copie `.env.example` para `.env` **na raiz**. Ele vale para todos os apps (`DATABASE_URL`, `AUTH_SECRET`, `AI_PROVIDER`). Se você tinha um `apps/web/.env.local`, passe o que estava lá para esse `.env`.
@@ -73,7 +75,7 @@ Pode rodar de novo sem duplicar nada. Se a pasta estiver em outro lugar, passe o
 
 ### Login único
 
-A conta é uma só para os 5 apps. O Painel cria a conta e os perfis (um clique, sem senha por enquanto) e grava um cookie com um token assinado (JWT). Como os cookies de `localhost` valem para todas as portas, todos os apps leem o mesmo cookie e sabem quem é você e qual perfil está ativo. O código fica em `packages/auth`; quando entrar Google ou GitHub, muda só lá.
+A conta é uma só para os 6 apps. O Painel cria a conta e os perfis (um clique, sem senha por enquanto) e grava um cookie com um token assinado (JWT). Como os cookies de `localhost` valem para todas as portas, todos os apps leem o mesmo cookie e sabem quem é você e qual perfil está ativo. O código fica em `packages/auth`; quando entrar Google ou GitHub, muda só lá.
 
 ### API de eventos
 
@@ -117,6 +119,20 @@ Junta tudo o que você estuda para conseguir a vaga do perfil:
 
 As regras ficam em `packages/study`; os prompts da IA, em `packages/ai/src/study.ts`.
 
+### Pair Programming (app Pair, porta 3005)
+
+Um mentor de IA que programa do seu lado como um sênior com um júnior. Você conta o que quer construir ("uma API REST em Java, nunca configurei o ambiente") e ele:
+
+- **Monta o roteiro** do ambiente até o projeto publicado e mostra em que passo você está.
+- **Entrega um passo por vez:** o que fazer (onde clicar, o que digitar, no Windows), por que fazer e como conferir. Só segue quando você clica em **Pode continuar**.
+- **Explica o código linha por linha.** Clicar numa linha de qualquer bloco de código pede a explicação dela. Também há **Explica mais devagar**, **Deu erro** e **Confere pra mim**.
+- **Confere o que você fez**, se você informar a pasta do projeto: o Claude Code lê os arquivos e roda só `git status/log/diff/branch` (nada de escrever ou apagar).
+- **Liga aos Estudos, se você quiser:** escolha uma trilha ou projeto e ele já sabe os passos, o repositório, os últimos commits e o que você marcou como "domino".
+
+Tudo é IA: não há resposta pronta nem guardada para reaproveitar. O banco guarda só as conversas (`pair_chats` e `pair_messages`), agrupadas por dia, para você continuar de onde parou. Para a IA vão o resumo da conversa (que ela mesma atualiza) e as últimas 10 mensagens. Cada passo concluído grava o evento `pair.passo-concluido`, que conta como avanço no projeto na meta do Hábito.
+
+O jeito de ensinar fica numa **skill do repositório**, `.claude/skills/pair-programming/SKILL.md`. O app lê esse arquivo como instrução da IA, e você também pode usar `/pair-programming` no Claude Code no terminal, dentro da pasta do repo. O formato da resposta e o código da IA ficam em `packages/ai/src/pair.ts`.
+
 ### Hábito (app Hábito, porta 3004)
 
 Entre no Painel, em `/conta` (um clique, sem senha; login com Google e GitHub está nas pendências) e crie um perfil: stack, senioridade e meta diária.
@@ -146,6 +162,7 @@ apps/system-design     Canvas (React Flow), simulação, concorrência, Estudo e
 apps/entrevista        Processo seletivo, treino Java e histórico (3002)
 apps/estudos           Central de estudos (3003)
 apps/habito            Placa-mãe do hábito (3004)
+apps/pair              Pair Programming: mentor passo a passo (3005)
 packages/db            Schema do Postgres (Drizzle), migrações e scripts do banco
 packages/auth          Login único: sessão em JWT, rotas de conta e perfis
 packages/events        API de eventos: gravar na outbox e ler com cursor
@@ -156,6 +173,7 @@ packages/ai            Avaliação por IA: Claude Code local (assinatura) ou API
 packages/hiring        Conteúdo e regras do processo seletivo
 packages/study         Regras da central de estudos
 packages/habit         Regras do hábito (placa-mãe)
+.claude/skills          Skill pair-programming (a persona do mentor)
 docs/                  Base técnica e docs/features (como replicar cada feature)
 ```
 

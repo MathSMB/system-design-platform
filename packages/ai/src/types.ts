@@ -1,6 +1,7 @@
 import type { Graph, SimResult } from "@sdp/sim-engine";
 import type { AnswerEvaluation, AnswerInput } from "./answer";
 import type { SessionFeedback, SessionInput } from "./session";
+import type { PairChatInput, PairChatReply } from "./pair";
 import type { ProjectAnalysisInput, ResearchInput, ScheduleDraft, ScheduleInput, StudyChatInput, StudyChatReply, StudyContext } from "./study";
 
 export interface EvaluationInput {
@@ -55,4 +56,6 @@ export interface AiProvider {
   analyzeProject(input: ProjectAnalysisInput): Promise<unknown>;
   /** Cronograma dia a dia em blocos curtos. */
   planSchedule(input: ScheduleInput): Promise<ScheduleDraft>;
+  /** Pair Programming: a próxima fala do mentor (pode ler a pasta do projeto, só leitura). */
+  pairChat(input: PairChatInput): Promise<PairChatReply>;
 }

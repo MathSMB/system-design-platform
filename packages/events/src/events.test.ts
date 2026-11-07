@@ -24,6 +24,10 @@ describe("describeEvent", () => {
     expect(describeEvent("projeto.passo-concluido", { repo: "MathSMB/api-pedidos", step: "#2 CRUD" })).toBe("Passo concluído em api-pedidos: #2 CRUD");
     expect(describeEvent("projeto.analisado", { repo: "a/b", relevant: false })).toBe("IA analisou b (ajuste pequeno)");
   });
+  it("passo do pair programming conta como avanço no projeto", () => {
+    expect(describeEvent("pair.passo-concluido", { step: "Instalar o JDK 21", title: "API de tarefas" })).toBe("Pair programming: Instalar o JDK 21 (API de tarefas)");
+    expect(ACTIVITY_OF["pair.passo-concluido"]).toBe("project");
+  });
   it("sem dado, usa a descrição do tipo", () => {
     expect(describeEvent("projeto.commits", {})).toBe(EVENT_TYPES["projeto.commits"]);
     expect(describeEvent("resposta.avaliada", null)).toBe(EVENT_TYPES["resposta.avaliada"]);
