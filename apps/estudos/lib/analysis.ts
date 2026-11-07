@@ -17,7 +17,7 @@ async function patchLink(db: Db, p: Profile, trailId: string, change: (g: Github
 }
 
 /** Grava os dias de commit pendentes como `projeto.commits` (contam no Hábito). */
-async function countDays(db: Db, who: { userId: string; profileId: string }, t: Trail, days: Record<string, number>) {
+export async function countDays(db: Db, who: { userId: string; profileId: string }, t: Trail, days: Record<string, number>) {
   for (const [day, n] of Object.entries(days))
     await emit("estudos", who, { type: "projeto.commits", ref: `${t.id}:${day}`, payload: { day, repo: t.github?.repo ?? null, trail: t.title.slice(0, 120), commits: n } }, db);
 }
@@ -26,7 +26,7 @@ async function countDays(db: Db, who: { userId: string; profileId: string }, t: 
  * Começa a análise em segundo plano e volta na hora. A tela acompanha pelo GET /api/estudos.
  * Volta false se já tem uma rodando ou se não há o que analisar.
  */
-export async function startAnalysis(db: Db, p: Profile, userId: string, token: string, trailId: string): Promise<boolean> {
+export async function startAnalysis(db: Db, p: Profile, userId: string, token: string | null, trailId: string): Promise<boolean> {
   const c = await loadCenter(db, p);
   const t = c.trails.find((x) => x.id === trailId);
   const g = t?.github;
@@ -40,7 +40,7 @@ export async function startAnalysis(db: Db, p: Profile, userId: string, token: s
   return true;
 }
 
-async function run(db: Db, p: Profile, userId: string, token: string, t: Trail, g: GithubLink, from: string, to: string, redo: boolean) {
+async function run(db: Db, p: Profile, userId: string, token: string | null, t: Trail, g: GithubLink, from: string, to: string, redo: boolean) {
   const who = { userId, profileId: p.id };
   try {
     let files: ApiFile[] = [];

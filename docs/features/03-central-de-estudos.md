@@ -60,16 +60,18 @@ As até 8 habilidades mais pedidas que você não domina, ordenadas por `frequê
 ### Projeto ligado ao GitHub (trilhas do tipo projeto)
 
 - Barra de conclusão com o % (passos feitos ÷ total). Sem GitHub, os passos são cadastrados à mão ("Novo passo") e marcados com check.
-- **Ligar ao GitHub:** (1) colar um token *fine-grained* só leitura (Contents e Issues em Read-only; Metadata vem junto), uma vez por conta; token clássico `ghp_` é recusado. (2) escolher o repositório da lista que o token enxerga e, se quiser, um label (só as issues com ele viram passos).
+- **Ligar ao GitHub:** repositório público liga só com o link, sem token (API pública do GitHub, 60 leituras por hora). Privado: (1) colar um token *fine-grained* só leitura (Contents e Issues em Read-only; Metadata vem junto), uma vez por conta; token clássico `ghp_` é recusado. (2) escolher o repositório da lista que o token enxerga e, se quiser, um label (só as issues com ele viram passos).
 - Ligado: cada issue vira um passo (aberta = a fazer, fechada = feito; PRs e "not planned" ficam de fora). Os passos do GitHub não têm check na plataforma: quem fecha é a issue. Repositório ainda sem issues mantém os passos à mão.
 - **Verificar:** botão no cartão e também sozinho ao abrir a página, se a última verificação tem mais de 10 min. Usa a API `compare` desde o último commit salvo (se ele sumiu por force-push, busca por data). Na primeira vez só marca o ponto de partida: o histórico aparece em "Movimento recente" (5 últimos commits), mas não conta no Hábito.
 - Merges e commits de robôs não contam. Desligar mantém os passos, que voltam a ser marcados à mão.
 - Hábito: cada dia com commit **relevante** (`projeto.commits`) e cada passo concluído (`projeto.passo-concluido`, inclusive os à mão) contam na métrica "avanço no projeto", no dia do commit ou do fechamento da issue (até 7 dias para trás). Os dias com commit ficam em `pendingDays` até a análise da IA: relevante → contam; ajuste pequeno → não contam; a IA falhou → contam assim mesmo.
 - **Análise da IA** (bloco no cartão): depois de um Verificar com commits novos, o Claude Code analisa sozinho em segundo plano (no máximo 1 vez por hora; o botão "Analisar" não espera; a tela consulta a cada 5 s). Recebe os commits de `analyzedSha` até `lastSha`, o diff cortado em ~30 KB (`diffDigest`: código, depois testes, depois o resto; sem lockfiles, builds e imagens), as issues, o objetivo da trilha e as habilidades da pesquisa. Devolve resumo, relevante, issues abertas que parecem prontas (só aviso, com link), habilidades praticadas (só nomes da pesquisa; sobem para "estudando") e próximo passo. Guarda as 5 últimas. Sem commit novo, "Analisar de novo" refaz a última. Grava `projeto.analisado`.
+- **Análise automática (caixinha "automática"):** ligada por padrão nos projetos sugeridos pela IA e desligada nos importados ("Já tenho um projeto"). Desligada, nenhum commit espera a IA: os dias com commit contam no Hábito na hora, e a análise só roda pelo botão "Analisar". Ao desligar, os dias que esperavam a análise contam na hora.
 
 ### Seção "Projetos para o portfólio"
 
 - Botão que pede à IA **3 projetos** a partir da pesquisa ("cerca de 1 minuto"). Sem pesquisa: "Os projetos saem da pesquisa da vaga: pesquise primeiro."
+- **Já tenho um projeto** (issue #30, sem IA, funciona sem a pesquisa): link do GitHub (opcional), nome, habilidades, passos e importância. Com o link, o app lê nome, descrição, linguagens (viram habilidades: as com ≥ 5% do código, mais os tópicos; Dockerfile vira Docker) e issues (viram passos); o que você digitou vale mais. Público não precisa de token. Sem link, o projeto é só à mão. **Importar vários do GitHub:** com o token, lista os repositórios com caixinhas (os que já estão nas trilhas vêm marcados e travados). Os importados ficam com a análise automática da IA desligada.
 - Card por projeto: título, pitch (por que impressiona numa entrevista), habilidades, semanas, "Entregas" recolhidas, botão "Escolher este ▶" ("Já está nas trilhas" depois) → vira uma trilha do tipo Projeto (importância 3, 3× por semana, 30 min, unidades = entregas).
 
 ### Seção "Cronograma"
@@ -170,7 +172,8 @@ Saída: `{ notes, outline[{week, focus}], items[{day, title, kind, minutes, trai
 | `POST /api/estudos/feito` | Marca/desmarca um bloco (hoje ou ontem) |
 | `GET/POST/DELETE /api/estudos/github` | Status do token (só `hint`, login e validade), salvar (confere com `GET /user`) e apagar |
 | `GET /api/estudos/github/repos` | Repositórios que o token enxerga |
-| `POST /api/estudos/github/verificar` | `{ trailId, repo?, label? }` liga e verifica; `{ trailId }` verifica; `{ trailId, unlink: true }` desliga. Grava `projeto.passo-concluido` e, se puder, começa a análise (`analyzing: true`) |
+| `POST /api/estudos/github/verificar` | `{ trailId, repo?, label? }` liga e verifica; `{ trailId }` verifica; `{ trailId, unlink: true }` desliga; `{ trailId, autoAi }` liga ou desliga a análise automática. Sem token, lê pela API pública. Grava `projeto.passo-concluido` e, se puder, começa a análise (`analyzing: true`) |
+| `POST /api/estudos/projetos/importar` | `{ items: [{ repo?, title?, why?, skills?, units?, importance? }] }` (até 10): cria as trilhas dos projetos que você já tinha, sem IA. Com `repo`, lê `GET /repos/…` e `/languages` e faz a primeira verificação; repetido ou com erro volta em `errors` por item |
 | `POST /api/estudos/github/analisar` | `{ trailId }` começa a análise da IA em segundo plano (409 se já roda ou não há o que analisar) |
 
 ## 5. Dados

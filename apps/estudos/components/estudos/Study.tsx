@@ -27,6 +27,7 @@ import { BookOpen, CalendarDays, Check, Compass, FolderGit2, History, Lightbulb,
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type SessionData, appUrl } from "@sdp/ui";
+import { ImportProjects } from "./ImportProjects";
 import { GithubLink } from "./GithubLink";
 import { RoleBuilder } from "./RoleBuilder";
 import { StudyChat } from "./StudyChat";
@@ -723,18 +724,25 @@ function Projects({ data, c, patch, load }: { data: Data; c: CenterData; patch(b
     load();
   }
   const chosen = new Set(c.trails.filter((t) => t.kind === "projeto").map((t) => t.title));
+  const [own, setOwn] = useState(false);
   return (
     <Section
       id="projetos"
       icon={<FolderGit2 size={18} className="text-accent" />}
       title="Projetos para o portfólio"
       right={
-        <button disabled={!has || busy} onClick={suggest} className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-40">
-          {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} {c.projectOptions.length ? "Sugerir outros" : "Sugerir 3 projetos"}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setOwn(!own)} className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs">
+            <Plus size={12} /> Já tenho um projeto
+          </button>
+          <button disabled={!has || busy} onClick={suggest} className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-40">
+            {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} {c.projectOptions.length ? "Sugerir outros" : "Sugerir 3 projetos"}
+          </button>
+        </div>
       }
     >
-      {!has && <div className="panel p-4 text-sm text-muted">Os projetos saem da pesquisa da vaga: pesquise primeiro.</div>}
+      {own && <ImportProjects known={c.trails.map((t) => t.github?.repo ?? "").filter(Boolean)} onDone={load} onClose={() => setOwn(false)} />}
+      {!has && !own && <div className="panel p-4 text-sm text-muted">As sugestões da IA saem da pesquisa da vaga: pesquise primeiro. Um projeto que você já tem entra pelo botão &quot;Já tenho um projeto&quot;.</div>}
       {busy && <p className="mb-2 text-[12px] text-muted">A IA está montando os projetos a partir das habilidades que faltam (cerca de 1 minuto)…</p>}
       {err && <p className="mb-2 text-[12px] text-down">{err}</p>}
       <div className="grid gap-3 md:grid-cols-3">
