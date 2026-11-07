@@ -1,4 +1,4 @@
-import { CHAT_STUCK_MS, chatTitle, cleanTrail } from "@sdp/study";
+import { CHAT_FRESH_MS, CHAT_STUCK_MS, chatTitle, cleanTrail } from "@sdp/study";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getDb, studyChatMessages, studyChats } from "@sdp/db";
@@ -44,7 +44,9 @@ export async function PATCH(req: Request) {
       .filter((m: { text: string }) => m.text.trim());
     const first = list.find((m: { role: string }) => m.role === "user");
     if (!first) return NextResponse.json({ ok: true });
-    const [chat] = await db.insert(studyChats).values({ profileId: s.profile.id, title: chatTitle(first.text) }).returning();
+    // fica como antiga: vai para "conversas anteriores" e a janela abre limpa
+    const old = new Date(Date.now() - CHAT_FRESH_MS - 60_000);
+    const [chat] = await db.insert(studyChats).values({ profileId: s.profile.id, title: chatTitle(first.text), createdAt: old, updatedAt: old }).returning();
     await db.insert(studyChatMessages).values(list.map((m: any) => ({ chatId: chat!.id, role: m.role, text: m.text, data: m.trail ? { action: "add_trail", trail: m.trail, used: m.used } : {} })));
     return NextResponse.json({ ok: true, chatId: chat!.id });
   }

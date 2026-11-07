@@ -936,10 +936,10 @@ function PaceBox({ p, tips }: { p: Pace; tips: string[] }) {
               <li className={short ? "text-warn" : "text-ok"}>
                 {short ? (
                   <>
-                    Para chegar em {br(p.targetDate)}, o ideal seria <span className="font-mono">{hm(p.idealWeeklyMin)}</span> por semana (~{Math.round(p.idealWeeklyMin / 7)} min por dia).
+                    Para chegar em {br(p.targetDate)}/{p.targetDate.slice(0, 4)}, o ideal seria <span className="font-mono">{hm(p.idealWeeklyMin)}</span> por semana (~{Math.round(p.idealWeeklyMin / 7)} min por dia).
                   </>
                 ) : (
-                  <>No seu tempo dá para chegar em {br(p.targetDate)}. 👍</>
+                  <>No seu tempo dá para chegar em {br(p.targetDate)}/{p.targetDate.slice(0, 4)}.</>
                 )}
               </li>
             )}

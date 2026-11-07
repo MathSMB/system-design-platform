@@ -178,6 +178,11 @@ Saída: `{ notes, outline[{week, focus}], items[{day, title, kind, minutes, trai
 | `study_centers` | `profile_id` (PK), `target_role`, `availability jsonb` (minutos[7], data alvo, folga, combinados), `trails jsonb`, `project_options jsonb`, `skill_status jsonb` (`{ habilidade: 0 \| 1 \| 2 }`), `schedule jsonb` (`{ createdAt, from, until, items[], outline[], notes }`), `updated_at` |
 | `role_research` | `id` ("cargo-normalizado:nível"), `role`, `level`, `status` (running \| done \| error), `data jsonb`, `error`, `started_at`, `researched_at` |
 | `github_tokens` | `user_id` (PK), `token_enc` (AES-256-GCM, "iv.tag.cifra" em base64url; chave de `GITHUB_TOKEN_KEY` ou derivada do `AUTH_SECRET`), `hint` (4 últimos caracteres), `login`, `expires_at`, `created_at`. O token nunca volta para o navegador. |
+| `study_research` | histórico de pesquisas por perfil: `id`, `profile_id`, `role`, `level`, `role_spec`, `status`, `data jsonb` (a pesquisa inteira), `error`, `started_at`, `researched_at`. Nada é sobrescrito; `study_centers.research_id` aponta a usada no cronograma. A antiga `role_research` é copiada para cá na primeira vez. |
+| `study_chats` | conversas com a IA: `title`, `summary` (resumo que a IA atualiza; vai no lugar das mensagens antigas), `pending_since` (a IA está respondendo) |
+| `study_chat_messages` | cada mensagem: `role`, `text`, `data jsonb` (`action`, `trail`, `used`, `attachments`) |
+| `study_attachments` | print/PDF: `name`, `mime`, `size`, `path` (na pasta `apps/estudos/.data/anexos`, ou `SDP_ANEXOS_DIR`), `extracted` (o que a IA leu; as mensagens seguintes mandam esse texto, não o arquivo) |
+| `study_schedules` | cada versão do cronograma: `schedule`, `availability`, `research_id`, `pace` (ritmo e dicas) |
 | `checkins` (compartilhada com o hábito) | marcas de bloco feito como `item_id = "c:<id do bloco>"` por perfil e dia |
 
 ## 6. Para replicar (checklist)
@@ -187,3 +192,12 @@ Saída: `{ notes, outline[{week, focus}], items[{day, title, kind, minutes, trai
 3. Página única em seções, com o drawer de conversa.
 4. Depende de conta/perfil e de `addDays`/`dayInBrazil` (horário de Brasília) do núcleo do hábito.
 5. Integração opcional com o hábito: item de meta "cumprir o cronograma do dia".
+
+## 7. Melhorias de 07/11/2026 (issues #18 a #23)
+
+- **Montador de cargo** (`packages/study/src/role.ts`): área → back/front/full-stack → linguagens → senioridade (ou especialidade em mobile, DevOps, dados, QA e cibersegurança). Gera um nome padronizado ("Dev full-stack Java e React pleno") e as tecnologias que orientam a pesquisa. A pesquisa usa a senioridade do montador. Texto livre continua possível.
+- **Histórico de pesquisas**: cada pesquisa vira uma linha nova, agrupada por dia na tela; dá para abrir uma antiga e escolher qual o cronograma usa. Se já existe uma pesquisa recente do mesmo cargo, a tela pergunta antes de gastar outra.
+- **Nível por quadradinhos**: três caixas por habilidade (não sei / estudando / domino), "não sei" marcado por padrão, com legenda e contador.
+- **Conversa salva no banco**: a mensagem dele é gravada antes de chamar a IA e a resposta quando chega, mesmo com a janela fechada (a tela espera pelo `pending_since`). Clicar fora não fecha (só X ou Esc) e o rascunho fica no navegador. Depois de 3 h parada, a janela abre limpa; "conversas anteriores" reabre qualquer uma. Para a IA vão o resumo da conversa e as 10 últimas mensagens.
+- **Anexos**: clipe, Ctrl+V ou arrastar; imagens e PDF até 5 MB, 3 por mensagem. O Claude Code recebe o arquivo em `--input-format stream-json` com blocos `image`/`document` em base64 (sem acesso a pastas). Só na primeira vez; depois vai o texto que a IA extraiu.
+- **Trilha = escopo, cronograma = tempo**: a IA monta as unidades e estima as horas totais; vezes por semana e minutos por sessão saíram da tela (o cronograma decide). Fica uma "data fixa" opcional. O quadro "Seu tempo x o ideal" calcula (sem IA) horas que faltam, quando termina no seu ritmo e o ritmo ideal para a data alvo; a IA do cronograma devolve dicas (`tips`).

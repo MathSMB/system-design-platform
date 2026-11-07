@@ -92,11 +92,13 @@ export function StudyChat({ profileId, onClose, onChanged }: { profileId: string
     let alive = true;
     (async () => {
       try {
+        // tira do navegador antes de mandar, para não importar duas vezes
         const old = JSON.parse(localStorage.getItem(legacyKey(profileId)) ?? "null");
+        localStorage.removeItem(legacyKey(profileId));
         if (Array.isArray(old) && old.some((m) => m?.role === "user")) {
           const r = await call("/api/estudos/conversas", json("PATCH", { op: "import", messages: old }));
-          if (r.ok) localStorage.removeItem(legacyKey(profileId));
-        } else localStorage.removeItem(legacyKey(profileId));
+          if (!r.ok) localStorage.setItem(legacyKey(profileId), JSON.stringify(old));
+        }
       } catch {}
       try {
         setText(localStorage.getItem(draftKey(profileId)) ?? "");
@@ -127,7 +129,9 @@ export function StudyChat({ profileId, onClose, onChanged }: { profileId: string
     return () => clearInterval(t);
   }, [pending, chatId, busy, open]);
 
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs, busy, pending]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, busy, pending]);
 
   // fecha só no X ou no Esc (clicar fora não fecha mais)
   useEffect(() => {

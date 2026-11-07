@@ -110,3 +110,13 @@ process.stdin.on("end", () => {
     expect(f.howToSpeak).toEqual([]);
   });
 });
+
+describe("anexos no Claude Code", () => {
+  it("lê a linha de resultado do stream-json e monta os blocos", async () => {
+    const { lastResult, attachmentBlock, parseClaudeJson } = await import("./claude-code");
+    const out = `{"type":"system"}\n{"type":"result","is_error":false,"structured_output":{"r":"ok"}}\n`;
+    expect(parseClaudeJson(lastResult(out))).toEqual({ r: "ok" });
+    expect(attachmentBlock({ name: "a.pdf", mime: "application/pdf", data: "x" }).type).toBe("document");
+    expect(attachmentBlock({ name: "a.png", mime: "image/png", data: "x" }).type).toBe("image");
+  });
+});
