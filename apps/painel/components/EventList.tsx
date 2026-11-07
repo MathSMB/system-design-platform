@@ -1,4 +1,4 @@
-import { EVENT_TYPES, type EventType } from "@sdp/events";
+import { describeEvent } from "@sdp/events";
 import type { EventRow } from "@sdp/db";
 import { getApp, type AppId } from "@sdp/ui";
 
@@ -21,7 +21,7 @@ export function EventList({ events }: { events: EventRow[] }) {
           <li key={e.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-sm">
             <span className="w-24 shrink-0 font-mono text-[11px] text-muted">{when(e.createdAt)}</span>
             <span className={`w-28 shrink-0 font-mono text-[11px] uppercase tracking-wider ${app ? COLOR[app.color] : "text-muted"}`}>{app?.title ?? e.source}</span>
-            <span className="min-w-0 flex-1">{EVENT_TYPES[e.type as EventType] ?? e.type}</span>
+            <span className="min-w-0 flex-1">{describeEvent(e.type, e.payload)}</span>
             <code className="font-mono text-[11px] text-muted">{e.type}</code>
           </li>
         );

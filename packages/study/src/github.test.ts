@@ -100,7 +100,7 @@ describe("cleanTrail com GitHub", () => {
   it("guarda o repositório só em projeto e preserva a issue do passo", () => {
     const github = { repo: "a/b", branch: "main", lastSha: "f".repeat(40), checkedAt: "2026-11-05T10:00:00Z", commits: [], label: "" };
     const t = cleanTrail({ kind: "projeto", title: "API", github, units: [{ id: "u1", title: "#1 x", done: true, issue: 1, url: "https://github.com/a/b/issues/1" }] })!;
-    expect(t.github).toEqual(github);
+    expect(t.github).toMatchObject(github);
     expect(t.units[0]).toMatchObject({ issue: 1, url: "https://github.com/a/b/issues/1" });
     expect(cleanTrail({ kind: "livro", title: "DDD", github })!.github).toBeUndefined();
     expect(cleanTrail({ kind: "projeto", title: "API", github: { repo: "inválido" } })!.github).toBeUndefined();

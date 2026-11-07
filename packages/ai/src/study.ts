@@ -378,3 +378,61 @@ export function normalizeSchedule(raw: unknown): ScheduleDraft {
 }
 
 export type { Schedule };
+
+// ---------------------------------------------------------------------------
+// Análise do progresso de um projeto ligado ao GitHub
+// ---------------------------------------------------------------------------
+
+export interface ProjectAnalysisInput {
+  project: string;
+  /** Objetivo da trilha (o "por que" do projeto). */
+  goal: string;
+  role: string;
+  /** Habilidades da pesquisa da vaga (use estes nomes em "skills"). */
+  skillNames: string[];
+  commits: { message: string; date: string }[];
+  issues: { number: number; title: string; done: boolean }[];
+  /** Diff já cortado e priorizado (diffDigest). */
+  diff: string;
+}
+
+export const ANALYSIS_SYSTEM_PROMPT = `Você é um tech lead que acompanha o projeto de portfólio de um candidato que estuda para uma vaga de tecnologia no Brasil. Recebe os commits novos, o diff (cortado: o que não coube aparece só pelo nome) e as issues do repositório, que são os passos do projeto. Responde em português do Brasil, direto e encorajador, sem exagero.
+
+Regras:
+- "summary": 2 a 4 frases sobre o que andou de fato no código (o que foi construído, testado ou corrigido). Cite arquivos ou partes só quando ajudar.
+- "relevant": true quando houve trabalho de verdade (código, testes, configuração que faz algo). false quando foi só ajuste pequeno (README, formatação, renomear, comentário, versão de dependência).
+- "readyIssues": números das issues ABERTAS que o código novo parece já resolver. Só quando houver evidência clara no diff; na dúvida, deixe de fora.
+- "skills": habilidades praticadas nestes commits, usando EXATAMENTE os nomes da lista de habilidades da vaga. Só as que aparecem no código, não as que o projeto vai usar um dia.
+- "next": uma sugestão curta de próximo passo, de preferência uma das issues abertas.
+- Nunca invente o que não está nos commits, no diff ou nas issues.`;
+
+export const ANALYSIS_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["summary", "relevant", "readyIssues", "skills", "next"],
+  properties: {
+    summary: { type: "string" },
+    relevant: { type: "boolean" },
+    readyIssues: { type: "array", items: { type: "integer" } },
+    skills: { type: "array", items: { type: "string" } },
+    next: { type: "string" },
+  },
+} as const;
+
+export function buildAnalysisPrompt(i: ProjectAnalysisInput): string {
+  const open = i.issues.filter((x) => !x.done);
+  const done = i.issues.filter((x) => x.done);
+  return [
+    `Projeto: ${i.project}`,
+    i.goal ? `Objetivo: ${i.goal}` : "",
+    `Vaga alvo: ${i.role}`,
+    i.skillNames.length ? `Habilidades da vaga (use estes nomes): ${i.skillNames.join(", ")}` : "Sem pesquisa da vaga: use nomes curtos e comuns de tecnologia.",
+    `Commits novos (${i.commits.length}):\n${i.commits.map((c) => `- ${c.date.slice(0, 10)} ${c.message}`).join("\n") || "(nenhum)"}`,
+    `Issues abertas:\n${open.map((x) => `- #${x.number} ${x.title}`).join("\n") || "(nenhuma)"}`,
+    `Issues fechadas:\n${done.map((x) => `- #${x.number} ${x.title}`).join("\n") || "(nenhuma)"}`,
+    `Diff:\n${i.diff || "(vazio)"}`,
+    "Analise e devolva o JSON pedido.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}

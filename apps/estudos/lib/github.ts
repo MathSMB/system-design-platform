@@ -6,6 +6,7 @@ import {
   countsAsWork,
   issuesToUnits,
   mergeCommits,
+  mergeDays,
   newlyDone,
   toCommit,
   type ApiCommit,
@@ -63,7 +64,7 @@ export class GithubError extends Error {
   }
 }
 
-async function gh<T>(token: string, path: string): Promise<{ data: T; headers: Headers }> {
+export async function gh<T>(token: string, path: string): Promise<{ data: T; headers: Headers }> {
   // GITHUB_API_URL só existe para testar com um GitHub falso
   const r = await fetch(`${process.env.GITHUB_API_URL || "https://api.github.com"}${path}`, {
     headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "system-design-lab-estudos" },
@@ -151,16 +152,21 @@ export async function syncTrail(token: string, t: Trail, link: GithubLink): Prom
   const units = fromIssues.length || linkedBefore ? fromIssues : t.units;
   const closed = linkedBefore ? newlyDone(t.units, units) : [];
 
+  const newCommitDays = commitsByDay(work, (iso) => dayInBrazil(new Date(iso)));
   const github: GithubLink = {
     ...link,
     branch,
     lastSha: head,
     checkedAt: new Date().toISOString(),
     commits: mergeCommits(link.commits, recent.filter(countsAsWork).map(toCommit)),
+    // na primeira vez (ou num projeto ligado antes da análise existir) a IA começa daqui
+    analyzedSha: link.analyzedSha ?? (link.lastSha || head),
+    // os dias com commit esperam a análise: só os relevantes contam no Hábito
+    pendingDays: mergeDays(link.pendingDays, newCommitDays),
   };
   return {
     trail: { ...t, github, units },
-    newCommitDays: commitsByDay(work, (iso) => dayInBrazil(new Date(iso))),
+    newCommitDays,
     newCommits: work.length,
     closed,
   };

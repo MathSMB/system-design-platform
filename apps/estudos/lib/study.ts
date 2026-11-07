@@ -103,6 +103,8 @@ export function practiced(c: Center, checks: Record<string, string[]>): string[]
   const out: string[] = [];
   for (const i of c.schedule?.items ?? []) if (i.skill && (checks[i.day] ?? []).includes(itemKey(i.id))) out.push(i.skill);
   for (const t of c.trails) if (t.units.some((u) => u.done)) out.push(...t.skills);
+  // habilidades que a IA viu no código dos projetos ligados ao GitHub (sobem para "estudando")
+  for (const t of c.trails) for (const a of t.github?.analyses ?? []) out.push(...a.skills);
   return out;
 }
 

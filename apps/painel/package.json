@@ -16,6 +16,7 @@
     "@sdp/events": "workspace:*",
     "@sdp/habit": "workspace:*",
     "@sdp/hiring": "workspace:*",
+    "@sdp/study": "workspace:*",
     "@sdp/ui": "workspace:*",
     "drizzle-orm": "0.45.4",
     "lucide-react": "1.55.0",

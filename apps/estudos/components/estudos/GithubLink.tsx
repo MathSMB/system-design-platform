@@ -1,7 +1,7 @@
 "use client";
 
 import type { Trail } from "@sdp/study";
-import { ExternalLink, FolderGit2, GitCommitHorizontal, Loader2, RefreshCw, Unlink } from "lucide-react";
+import { ExternalLink, FolderGit2, GitCommitHorizontal, Loader2, RefreshCw, Sparkles, Unlink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 const NEW_TOKEN_URL = "https://github.com/settings/personal-access-tokens/new";
@@ -45,10 +45,31 @@ export function GithubLink({ t, onChanged }: { t: Trail; onChanged(): Promise<un
     if (!r.ok) return setMsg(r.body.error ?? "Não deu certo."), false;
     if (body.unlink) setMsg(null);
     else if (r.body.newCommits || r.body.closed)
-      setMsg(`${r.body.newCommits} commit${r.body.newCommits === 1 ? "" : "s"} novo${r.body.newCommits === 1 ? "" : "s"} · ${r.body.closed} passo${r.body.closed === 1 ? "" : "s"} concluído${r.body.closed === 1 ? "" : "s"}`);
+      setMsg(
+        `${r.body.newCommits} commit${r.body.newCommits === 1 ? "" : "s"} novo${r.body.newCommits === 1 ? "" : "s"} · ${r.body.closed} passo${r.body.closed === 1 ? "" : "s"} concluído${r.body.closed === 1 ? "" : "s"}${r.body.analyzing ? " · a IA está analisando" : ""}`,
+      );
     else setMsg("Nada novo desde a última verificação.");
     await onChanged();
     return true;
+  };
+
+  // enquanto a IA analisa, confere a cada 5 s
+  const running = g?.analysis.state === "running" && Date.now() - Date.parse(g.analysis.startedAt ?? "") < 10 * 60000;
+  useEffect(() => {
+    // a análise terminou: o aviso "a IA está analisando" sai
+    if (!running) return void setMsg((m) => (m?.includes("analisando") ? null : m));
+    const timer = setInterval(() => onChanged(), 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  const analyze = async () => {
+    setBusy(true);
+    setMsg(null);
+    const r = await post("/api/estudos/github/analisar", { trailId: t.id });
+    setBusy(false);
+    if (!r.ok) setMsg(r.body.error ?? "Não deu certo.");
+    await onChanged();
   };
 
   useEffect(() => {
@@ -107,6 +128,7 @@ export function GithubLink({ t, onChanged }: { t: Trail; onChanged(): Promise<un
       </div>
       {msg && <p className="text-[12px] text-muted">{msg}</p>}
       {!issues && <p className="text-[12px] text-muted">O repositório ainda não tem issues{g.label ? ` com o label "${g.label}"` : ""}. Crie uma issue para cada passo do projeto: aberta = a fazer, fechada = feito.</p>}
+      <Analysis t={t} running={running} busy={busy} onAnalyze={analyze} />
       {g.commits.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-[11px] text-muted">Movimento recente</span>
@@ -122,6 +144,63 @@ export function GithubLink({ t, onChanged }: { t: Trail; onChanged(): Promise<un
             ))}
           </ul>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** O que a IA disse sobre os últimos commits: resumo, habilidades, issues que parecem prontas e próximo passo. */
+function Analysis({ t, running, busy, onAnalyze }: { t: Trail; running: boolean; busy: boolean; onAnalyze(): void }) {
+  const g = t.github!;
+  const a = g.analyses[0];
+  const pending = g.lastSha && g.analyzedSha !== g.lastSha;
+  if (!a && !running && g.analysis.state !== "error" && !pending) return null;
+  const url = (n: number) => t.units.find((u) => u.issue === n)?.url;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md bg-panel-2/60 p-2.5 text-[12px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[11px] text-accent-2">
+          <Sparkles size={12} /> Análise da IA{a ? ` · ${ago(a.at)}` : ""}
+          {a && !a.relevant && <span className="text-muted">· ajuste pequeno, não conta no Hábito</span>}
+        </span>
+        <button disabled={busy || running} onClick={onAnalyze} className="btn-ghost flex items-center gap-1 px-2 py-0.5 text-[11px]">
+          {running ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} {running ? "Analisando…" : a && !pending ? "Analisar de novo" : "Analisar"}
+        </button>
+      </div>
+      {running && <p className="text-muted">O Claude Code está lendo os commits novos. Leva de 1 a 2 minutos.</p>}
+      {!running && g.analysis.state === "error" && <p className="text-down">A última análise falhou: {g.analysis.error?.replace(/\.?$/, ".")} Os commits que esperavam a análise contaram no Hábito assim mesmo.</p>}
+      {!running && !a && pending && g.analysis.state !== "error" && <p className="text-muted">Há commits ainda não analisados. A análise roda sozinha no máximo 1 vez por hora.</p>}
+      {a && (
+        <>
+          <p>{a.summary}</p>
+          {a.skills.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {a.skills.map((s) => (
+                <span key={s} className="rounded-full border border-ok/40 px-2 py-0.5 text-[10px] text-ok">
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+          {a.readyIssues.length > 0 && (
+            <p className="text-muted">
+              Parecem prontas (feche no GitHub se estiverem):{" "}
+              {a.readyIssues.map((n, i) => (
+                <span key={n}>
+                  {i > 0 && ", "}
+                  <a href={url(n)} target="_blank" rel="noreferrer" className="text-accent-2 underline">
+                    #{n}
+                  </a>
+                </span>
+              ))}
+            </p>
+          )}
+          {a.next && (
+            <p className="text-muted">
+              Próximo passo: <span className="text-text">{a.next}</span>
+            </p>
+          )}
+        </>
       )}
     </div>
   );

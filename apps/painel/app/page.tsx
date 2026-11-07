@@ -5,6 +5,9 @@ import { getSession, type Session } from "@sdp/auth";
 import { recentEvents } from "@sdp/events";
 import { APP_LIST, appUrl, profileTitle } from "@sdp/ui";
 import { EventList } from "@/components/EventList";
+import { Projects } from "@/components/Projects";
+import { getDb, studyCenters } from "@sdp/db";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +25,15 @@ const TONE: Record<string, { text: string; hover: string }> = {
 export default async function Painel() {
   let session: Session | null = null;
   let events: Awaited<ReturnType<typeof recentEvents>> = [];
+  let trails: unknown = null;
   let dbUp = true;
   try {
     session = await getSession();
-    if (session?.profile) events = await recentEvents(session.profile.id, 8);
+    if (session?.profile) {
+      events = await recentEvents(session.profile.id, 8);
+      const [row] = await getDb().select({ trails: studyCenters.trails }).from(studyCenters).where(eq(studyCenters.profileId, session.profile.id));
+      trails = row?.trails ?? null;
+    }
   } catch {
     dbUp = false;
   }
@@ -88,6 +96,15 @@ export default async function Painel() {
           </a>
         ))}
       </div>
+
+      {session?.profile && (
+        <section className="mt-10">
+          <h2 className="hud-label">Projetos</h2>
+          <div className="mt-3">
+            <Projects trails={trails} />
+          </div>
+        </section>
+      )}
 
       {session?.profile && (
         <section className="mt-10">

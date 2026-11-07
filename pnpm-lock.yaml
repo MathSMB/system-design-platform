@@ -221,6 +221,9 @@ importers:
       '@sdp/hiring':
         specifier: workspace:*
         version: link:../../packages/hiring
+      '@sdp/study':
+        specifier: workspace:*
+        version: link:../../packages/study
       '@sdp/ui':
         specifier: workspace:*
         version: link:../../packages/ui
