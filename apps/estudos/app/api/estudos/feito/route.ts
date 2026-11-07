@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   if (done) await db.insert(checkins).values({ profileId: p.id, day: item.day, itemId: itemKey(item.id) }).onConflictDoNothing();
   else await db.delete(checkins).where(key);
   if (item.trailId && item.unitId) {
-    const trails = c.trails.map((t) => (t.id !== item.trailId ? t : { ...t, units: t.units.map((u) => (u.id === item.unitId ? { ...u, done } : u)) }));
+    const trails = c.trails.map((t) => (t.id !== item.trailId ? t : { ...t, units: t.units.map((u) => (u.id === item.unitId && !u.issue ? { ...u, done } : u)) }));
     await saveCenter(db, p.id, { trails });
   }
   if (done) await emitAsUser("estudos", { type: "estudo.item-feito", ref: `${item.day}:${itemKey(item.id)}`, payload: { day: item.day, title: item.title.slice(0, 120) } });

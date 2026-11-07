@@ -24,6 +24,7 @@ import { BookOpen, CalendarDays, Compass, FolderGit2, Loader2, MessageCircle, Pl
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type SessionData, appUrl } from "@sdp/ui";
+import { GithubLink } from "./GithubLink";
 import { StudyChat } from "./StudyChat";
 import { StudyIntro } from "./Intro";
 
@@ -127,7 +128,7 @@ export function Study() {
           <Hero data={data} c={c} onChat={() => setChat(true)} />
           <Role data={data} c={c} patch={patch} load={load} />
           <Gaps data={data} />
-          <Trails c={c} patch={patch} onChat={() => setChat(true)} />
+          <Trails c={c} patch={patch} reload={load} onChat={() => setChat(true)} />
           <Projects data={data} c={c} patch={patch} load={load} />
           <Plan data={data} c={c} patch={patch} load={load} />
           {chat && data.session?.profile && <StudyChat profileId={data.session.profile.id} onClose={() => setChat(false)} onChanged={load} />}
@@ -376,7 +377,7 @@ function Gaps({ data }: { data: Data }) {
 // Trilhas
 // ---------------------------------------------------------------------------
 
-function Trails({ c, patch, onChat }: { c: CenterData; patch(b: unknown): Promise<unknown>; onChat(): void }) {
+function Trails({ c, patch, reload, onChat }: { c: CenterData; patch(b: unknown): Promise<unknown>; reload(): Promise<unknown>; onChat(): void }) {
   const [adding, setAdding] = useState(false);
   return (
     <Section
@@ -400,7 +401,7 @@ function Trails({ c, patch, onChat }: { c: CenterData; patch(b: unknown): Promis
       )}
       <div className="grid gap-3 md:grid-cols-2">
         {c.trails.map((t) => (
-          <TrailCard key={t.id} t={t} patch={patch} />
+          <TrailCard key={t.id} t={t} patch={patch} reload={reload} />
         ))}
       </div>
     </Section>
@@ -416,9 +417,11 @@ export function TrailSummary({ t }: { t: Pick<Trail, "kind" | "importance" | "pe
   );
 }
 
-function TrailCard({ t, patch }: { t: Trail; patch(b: unknown): Promise<unknown> }) {
+function TrailCard({ t, patch, reload }: { t: Trail; patch(b: unknown): Promise<unknown>; reload(): Promise<unknown> }) {
   const p = trailProgress(t);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState("");
+  const project = t.kind === "projeto";
   const edit = async (b: unknown) => {
     setBusy(true);
     await patch(b);
@@ -437,13 +440,15 @@ function TrailCard({ t, patch }: { t: Trail; patch(b: unknown): Promise<unknown>
       </div>
       {t.why && <p className="text-[12px] text-muted">{t.why}</p>}
       <div className="flex items-center gap-2">
-        <span className="h-1.5 flex-1 rounded-full bg-panel-2">
+        <span className="h-1.5 flex-1 rounded-full bg-panel-2" role="progressbar" aria-valuenow={p.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Conclusão de ${t.title}`}>
           <span className="block h-full rounded-full bg-ok" style={{ width: `${p.pct}%` }} />
         </span>
         <span className="font-mono text-[11px] text-muted">
-          {p.done}/{p.total} {kindOf(t.kind).units}
+          {project && <span className="mr-1.5 text-ok">{p.pct}%</span>}
+          {p.done}/{p.total} {t.github && t.units.some((u) => u.issue) ? "issues" : kindOf(t.kind).units}
         </span>
       </div>
+      {project && <GithubLink t={t} onChanged={reload} />}
       <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted">
         <label className="flex items-center gap-1">
           vezes/semana
@@ -464,19 +469,50 @@ function TrailCard({ t, patch }: { t: Trail; patch(b: unknown): Promise<unknown>
           </select>
         </label>
       </div>
-      {t.units.length > 0 && (
+      {(t.units.length > 0 || project) && (
         <details className="text-[13px]">
           <summary className="cursor-pointer text-[12px] text-muted">Ver {kindOf(t.kind).units}</summary>
           <ul className="mt-2 flex max-h-64 flex-col gap-1 overflow-y-auto">
             {t.units.map((u) => (
-              <li key={u.id}>
-                <label className={`flex items-center gap-2 ${u.done ? "text-ok" : ""}`}>
-                  <input type="checkbox" disabled={busy} checked={u.done} onChange={(e) => edit({ op: "unit", trailId: t.id, unitId: u.id, done: e.target.checked })} />
-                  {u.title}
-                </label>
+              <li key={u.id} className="group flex items-center gap-2">
+                {u.issue ? (
+                  // passo que vem do GitHub: só leitura, quem fecha é a issue
+                  <a href={u.url} target="_blank" rel="noreferrer" className={`flex flex-1 items-center gap-2 hover:text-accent-2 ${u.done ? "text-ok" : ""}`} title="Abra a issue no GitHub para fechar">
+                    <input type="checkbox" readOnly tabIndex={-1} checked={u.done} className="pointer-events-none" />
+                    {u.title}
+                  </a>
+                ) : (
+                  <>
+                    <label className={`flex flex-1 items-center gap-2 ${u.done ? "text-ok" : ""}`}>
+                      <input type="checkbox" disabled={busy} checked={u.done} onChange={(e) => edit({ op: "unit", trailId: t.id, unitId: u.id, done: e.target.checked })} />
+                      {u.title}
+                    </label>
+                    {project && (
+                      <button aria-label={`Remover ${u.title}`} disabled={busy} onClick={() => edit({ op: "unit-remove", trailId: t.id, unitId: u.id })} className="text-muted opacity-0 hover:text-down group-hover:opacity-100">
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </>
+                )}
               </li>
             ))}
           </ul>
+          {project && !t.units.some((u) => u.issue) && (
+            <form
+              className="mt-2 flex gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!step.trim()) return;
+                await edit({ op: "unit-add", trailId: t.id, title: step });
+                setStep("");
+              }}
+            >
+              <input value={step} onChange={(e) => setStep(e.target.value)} placeholder="Novo passo (à mão)" className="min-w-0 flex-1 text-[12px]" />
+              <button disabled={busy || !step.trim()} className="btn-ghost flex items-center gap-1 px-2.5 py-1 text-[11px]">
+                <Plus size={11} /> Adicionar
+              </button>
+            </form>
+          )}
         </details>
       )}
       {t.skills.length > 0 && <div className="text-[11px] text-muted">Cobre: {t.skills.join(", ")}</div>}

@@ -57,6 +57,15 @@ As até 8 habilidades mais pedidas que você não domina, ordenadas por `frequê
 - Vazio: "Nenhuma trilha ainda. Adicione a sua pós, uma certificação, o livro que está lendo ou um projeto sugerido abaixo."
 - Limites: 20 trilhas, 60 unidades por trilha.
 
+### Projeto ligado ao GitHub (trilhas do tipo projeto)
+
+- Barra de conclusão com o % (passos feitos ÷ total). Sem GitHub, os passos são cadastrados à mão ("Novo passo") e marcados com check.
+- **Ligar ao GitHub:** (1) colar um token *fine-grained* só leitura (Contents e Issues em Read-only; Metadata vem junto), uma vez por conta; token clássico `ghp_` é recusado. (2) escolher o repositório da lista que o token enxerga e, se quiser, um label (só as issues com ele viram passos).
+- Ligado: cada issue vira um passo (aberta = a fazer, fechada = feito; PRs e "not planned" ficam de fora). Os passos do GitHub não têm check na plataforma: quem fecha é a issue. Repositório ainda sem issues mantém os passos à mão.
+- **Verificar:** botão no cartão e também sozinho ao abrir a página, se a última verificação tem mais de 10 min. Usa a API `compare` desde o último commit salvo (se ele sumiu por force-push, busca por data). Na primeira vez só marca o ponto de partida: o histórico aparece em "Movimento recente" (5 últimos commits), mas não conta no Hábito.
+- Merges e commits de robôs não contam. Desligar mantém os passos, que voltam a ser marcados à mão.
+- Hábito: cada dia com commit (`projeto.commits`) e cada passo concluído (`projeto.passo-concluido`, inclusive os à mão) contam na métrica "avanço no projeto", no dia do commit ou do fechamento da issue (até 7 dias para trás).
+
 ### Seção "Projetos para o portfólio"
 
 - Botão que pede à IA **3 projetos** a partir da pesquisa ("cerca de 1 minuto"). Sem pesquisa: "Os projetos saem da pesquisa da vaga: pesquise primeiro."
@@ -152,12 +161,15 @@ Saída: `{ notes, outline[{week, focus}], items[{day, title, kind, minutes, trai
 | Rota | O que faz |
 |---|---|
 | `GET /api/estudos` | Tudo da central do perfil ativo: centro, pesquisa (status, erro, dados), níveis, pronto %, lacunas, marcas dos últimos 60 dias, se precisa replanejar |
-| `PATCH /api/estudos` | `{ op }`: `role`, `availability`, `skill`, `trail-add`, `trail-update`, `trail-remove`, `unit`, `project-choose` |
+| `PATCH /api/estudos` | `{ op }`: `role`, `availability`, `skill`, `trail-add`, `trail-update`, `trail-remove`, `unit`, `unit-add`, `unit-remove`, `project-choose` (passos de issue do GitHub não aceitam `unit`) |
 | `POST /api/estudos/pesquisa` | Começa a pesquisa **em segundo plano** (responde na hora com `running`; grava `done` ou `error` ao terminar) |
 | `POST /api/estudos/conversa` | Uma rodada da conversa |
 | `POST /api/estudos/projetos` | Gera os 3 projetos |
 | `POST /api/estudos/cronograma` | Gera ou refaz os próximos 14 dias |
 | `POST /api/estudos/feito` | Marca/desmarca um bloco (hoje ou ontem) |
+| `GET/POST/DELETE /api/estudos/github` | Status do token (só `hint`, login e validade), salvar (confere com `GET /user`) e apagar |
+| `GET /api/estudos/github/repos` | Repositórios que o token enxerga |
+| `POST /api/estudos/github/verificar` | `{ trailId, repo?, label? }` liga e verifica; `{ trailId }` verifica; `{ trailId, unlink: true }` desliga. Grava `projeto.commits` e `projeto.passo-concluido` |
 
 ## 5. Dados
 
@@ -165,6 +177,7 @@ Saída: `{ notes, outline[{week, focus}], items[{day, title, kind, minutes, trai
 |---|---|
 | `study_centers` | `profile_id` (PK), `target_role`, `availability jsonb` (minutos[7], data alvo, folga, combinados), `trails jsonb`, `project_options jsonb`, `skill_status jsonb` (`{ habilidade: 0 \| 1 \| 2 }`), `schedule jsonb` (`{ createdAt, from, until, items[], outline[], notes }`), `updated_at` |
 | `role_research` | `id` ("cargo-normalizado:nível"), `role`, `level`, `status` (running \| done \| error), `data jsonb`, `error`, `started_at`, `researched_at` |
+| `github_tokens` | `user_id` (PK), `token_enc` (AES-256-GCM, "iv.tag.cifra" em base64url; chave de `GITHUB_TOKEN_KEY` ou derivada do `AUTH_SECRET`), `hint` (4 últimos caracteres), `login`, `expires_at`, `created_at`. O token nunca volta para o navegador. |
 | `checkins` (compartilhada com o hábito) | marcas de bloco feito como `item_id = "c:<id do bloco>"` por perfil e dia |
 
 ## 6. Para replicar (checklist)

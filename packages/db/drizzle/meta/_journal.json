@@ -22,6 +22,13 @@
       "when": 1793809000706,
       "tag": "0002_contas_conectadas",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794051795108,
+      "tag": "0003_github",
+      "breakpoints": true
     }
   ]
 }

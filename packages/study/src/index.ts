@@ -5,6 +5,9 @@
  * Tudo aqui é puro (sem banco, sem IA, sem React), para testar e reaproveitar.
  */
 import { addDays } from "@sdp/habit";
+import { cleanGithub, type GithubLink } from "./github";
+
+export * from "./github";
 
 // ---------------------------------------------------------------------------
 // Helpers de limpeza (os dados vêm da tela ou da IA)
@@ -119,6 +122,11 @@ export interface TrailUnit {
   id: string;
   title: string;
   done: boolean;
+  /** Número da issue no GitHub, quando o passo vem de um repositório ligado. */
+  issue?: number;
+  url?: string;
+  /** ISO de quando a issue fechou. */
+  doneAt?: string;
 }
 
 export interface Trail {
@@ -136,6 +144,8 @@ export interface Trail {
   deadline: string | null;
   skills: string[];
   units: TrailUnit[];
+  /** Repositório do GitHub ligado (só projetos): os passos passam a vir das issues. */
+  github?: GithubLink | null;
 }
 
 export const MAX_TRAILS = 20;
@@ -151,8 +161,14 @@ export function cleanTrail(x: unknown, id?: string): Trail | null {
     const t = typeof u === "string" ? str(u, 160) : str((u as Record<string, unknown>)?.title, 160);
     if (!t) continue;
     const uid = typeof u === "object" && u && typeof (u as any).id === "string" && /^u\d{1,3}$/.test((u as any).id) ? (u as any).id : `u${units.length + 1}`;
-    units.push({ id: units.some((v) => v.id === uid) ? `u${units.length + 1}` : uid, title: t, done: typeof u === "object" && (u as any)?.done === true });
+    const uo = typeof u === "object" && u ? (u as Record<string, unknown>) : {};
+    const unit: TrailUnit = { id: units.some((v) => v.id === uid) ? `u${units.length + 1}` : uid, title: t, done: uo.done === true };
+    if (Number.isInteger(uo.issue) && (uo.issue as number) > 0) unit.issue = uo.issue as number;
+    if (typeof uo.url === "string" && /^https:\/\/github\.com\//.test(uo.url)) unit.url = uo.url.slice(0, 300);
+    if (typeof uo.doneAt === "string" && uo.doneAt) unit.doneAt = uo.doneAt.slice(0, 30);
+    units.push(unit);
   }
+  const github = o.kind === "projeto" ? cleanGithub(o.github) : null;
   return {
     id: id ?? (typeof o.id === "string" && /^t[a-z0-9]{1,16}$/.test(o.id) ? o.id : `t${Date.now().toString(36)}`),
     kind: isKind(o.kind) ? o.kind : "outro",
@@ -164,6 +180,7 @@ export function cleanTrail(x: unknown, id?: string): Trail | null {
     deadline: isDay(o.deadline) ? o.deadline : null,
     skills: strings(o.skills, 12, 60),
     units,
+    ...(github ? { github } : {}),
   };
 }
 
