@@ -25,6 +25,12 @@ export interface GithubLink {
   analysis: AnalysisStatus;
   /** Últimas análises da IA, da mais nova para a mais velha. */
   analyses: ProjectAnalysis[];
+  /**
+   * A IA analisa sozinha os commits novos (no máximo 1 vez por hora). Desligada (padrão nos
+   * projetos que você já tinha e importou), os commits contam no Hábito direto e a análise
+   * só roda pelo botão "Analisar".
+   */
+  autoAi: boolean;
 }
 
 export interface AnalysisStatus {
@@ -117,6 +123,8 @@ export function cleanGithub(x: unknown): GithubLink | null {
     pendingDays: cleanDays(o.pendingDays),
     analysis: cleanStatus(o.analysis),
     analyses: (Array.isArray(o.analyses) ? o.analyses : []).map(cleanAnalysis).filter((a): a is ProjectAnalysis => !!a).slice(0, MAX_ANALYSES),
+    // projetos ligados antes da chave existir continuam com a análise automática
+    autoAi: o.autoAi !== false,
   };
 }
 
@@ -193,7 +201,7 @@ export function fromAi(
 
 /** Se a análise automática pode rodar agora: tem commit pendente, nada rodando e passou 1 h da última. */
 export function canAutoAnalyze(g: GithubLink, now: Date): boolean {
-  if (!g.lastSha || g.lastSha === g.analyzedSha) return false;
+  if (!g.autoAi || !g.lastSha || g.lastSha === g.analyzedSha) return false;
   if (analysisRunning(g, now)) return false;
   const last = Math.max(Date.parse(g.analysis.startedAt ?? "") || 0, Date.parse(g.analyses[0]?.at ?? "") || 0);
   return now.getTime() - last >= AUTO_ANALYSIS_MIN * 60_000;
@@ -356,4 +364,73 @@ export function issuesToUnits(issues: ApiIssue[], old: TrailUnit[], label = ""):
 export function newlyDone(before: TrailUnit[], after: TrailUnit[]): TrailUnit[] {
   const was = new Map(before.filter((u) => u.issue).map((u) => [u.issue!, u.done]));
   return after.filter((u) => u.done && u.issue && was.get(u.issue) === false);
+}
+
+// ---------------------------------------------------------------------------
+// Projeto que você já tinha: importar pelo link, sem IA
+// ---------------------------------------------------------------------------
+
+/** O que a API devolve em GET /repos/{dono}/{repo}. */
+export interface ApiRepo {
+  full_name: string;
+  name: string;
+  description?: string | null;
+  private?: boolean;
+  default_branch?: string;
+  topics?: string[];
+  homepage?: string | null;
+}
+
+/** "system-design-platform" → "System design platform". */
+export function repoTitle(name: string): string {
+  const s = name.replace(/[-_.]+/g, " ").replace(/\s+/g, " ").trim();
+  return s ? s[0]!.toUpperCase() + s.slice(1) : name;
+}
+
+/** Linguagens do GitHub com nome de habilidade mais conhecido. */
+const LANGUAGE_SKILL: Record<string, string> = { Dockerfile: "Docker", HCL: "Terraform", Shell: "Shell script", "Jupyter Notebook": "Python" };
+
+/**
+ * Habilidades a partir das linguagens do GitHub (bytes por linguagem) e dos tópicos do
+ * repositório: as linguagens com pelo menos 5% do código, da maior para a menor, e depois os tópicos.
+ */
+export function skillsOf(languages: Record<string, number>, topics: string[] = [], max = 8): string[] {
+  const total = Object.values(languages).reduce((a, n) => a + (n > 0 ? n : 0), 0);
+  const langs = Object.entries(languages)
+    .filter(([, n]) => total > 0 && n / total >= 0.05)
+    .sort((a, b) => b[1] - a[1])
+    .map(([l]) => l);
+  const out: string[] = [];
+  for (const s of [...langs.map((l) => LANGUAGE_SKILL[l] ?? l), ...topics.map((t) => t.replace(/-/g, " "))]) {
+    const v = s.trim().slice(0, 60);
+    if (v && !out.some((o) => o.toLowerCase() === v.toLowerCase())) out.push(v);
+  }
+  return out.slice(0, max);
+}
+
+/** O que a tela manda para importar um projeto (com ou sem link). */
+export interface ImportInput {
+  repo?: string;
+  title?: string;
+  why?: string;
+  skills?: string[];
+  units?: string[];
+  importance?: number;
+}
+
+/**
+ * Monta a trilha de um projeto que você já tinha. O que você digitou vale mais que o que
+ * veio do GitHub; com link, a análise automática da IA fica desligada.
+ */
+export function importedTrail(input: ImportInput, repo?: { meta: ApiRepo; languages: Record<string, number> }): Record<string, unknown> {
+  const skills = (input.skills ?? []).map((s) => String(s).trim()).filter(Boolean);
+  return {
+    kind: "projeto",
+    title: input.title?.trim() || (repo ? repoTitle(repo.meta.name) : ""),
+    why: input.why?.trim() || repo?.meta.description || "",
+    importance: input.importance ?? 2,
+    skills: skills.length ? skills : repo ? skillsOf(repo.languages, repo.meta.topics) : [],
+    units: input.units ?? [],
+    ...(repo ? { github: { repo: repo.meta.full_name, branch: repo.meta.default_branch ?? "", label: "", commits: [], autoAi: false } } : {}),
+  };
 }

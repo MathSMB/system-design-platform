@@ -3,7 +3,7 @@ import { canAutoAnalyze, cleanGithub, parseRepo, type Trail } from "@sdp/study";
 import { NextResponse } from "next/server";
 import { getDb } from "@sdp/db";
 import { emitAsUser, getSession } from "@sdp/auth";
-import { startAnalysis } from "@/lib/analysis";
+import { countDays, startAnalysis } from "@/lib/analysis";
 import { GithubError, loadToken, syncTrail } from "@/lib/github";
 import { loadCenter, saveCenter } from "@/lib/study";
 
@@ -13,7 +13,9 @@ export const maxDuration = 60;
 /**
  * Liga, verifica ou desliga o repositório de uma trilha de projeto.
  * { trailId, repo?, label? } liga (ou troca) e já verifica; { trailId } só verifica;
- * { trailId, unlink: true } desliga (os passos ficam, e voltam a ser marcados à mão).
+ * { trailId, unlink: true } desliga (os passos ficam, e voltam a ser marcados à mão);
+ * { trailId, autoAi } liga ou desliga a análise automática da IA.
+ * Sem token salvo, lê pela API pública (só repositório público).
  */
 export async function POST(req: Request) {
   const db = getDb();
@@ -36,17 +38,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (typeof b.autoAi === "boolean" && b.repo === undefined) {
+    if (!t.github) return NextResponse.json({ error: "Ligue o repositório primeiro." }, { status: 400 });
+    // desligando: os dias que esperavam a análise contam agora
+    if (!b.autoAi && Object.keys(t.github.pendingDays).length) await countDays(db, { userId: s.user.id, profileId: p.id }, t, t.github.pendingDays);
+    await save({ ...t, github: { ...t.github, autoAi: b.autoAi, pendingDays: b.autoAi ? t.github.pendingDays : {} } });
+    return NextResponse.json({ ok: true });
+  }
+
   let link = t.github ?? null;
   if (b.repo !== undefined) {
     const repo = parseRepo(b.repo);
     if (!repo) return NextResponse.json({ error: "Repositório inválido. Use dono/repo ou o link do GitHub." }, { status: 400 });
     const label = typeof b.label === "string" ? b.label.trim().slice(0, 50) : "";
-    link = repo === link?.repo && label === link.label ? link : cleanGithub({ repo, label, commits: [] });
+    link = repo === link?.repo && label === link.label ? link : cleanGithub({ repo, label, commits: [], autoAi: link?.autoAi ?? true });
   }
   if (!link) return NextResponse.json({ error: "Escolha o repositório." }, { status: 400 });
 
   const token = await loadToken(db, s.user.id);
-  if (!token) return NextResponse.json({ error: "Cole o token do GitHub primeiro." }, { status: 400 });
   try {
     const r = await syncTrail(token, t, link);
     await save(r.trail);
@@ -55,7 +64,9 @@ export async function POST(req: Request) {
       const day = u.doneAt ? dayInBrazil(new Date(u.doneAt)) : dayInBrazil();
       await emitAsUser("estudos", { type: "projeto.passo-concluido", ref: `${t.id}#${u.issue}`, payload: { day, repo, trail: t.title.slice(0, 120), step: u.title, url: u.url ?? null } });
     }
-    // commits novos: a IA analisa em segundo plano (no máximo 1 vez por hora) e só os relevantes contam no Hábito
+    // sem a IA automática, os commits novos contam no Hábito na hora
+    if (r.trail.github && !r.trail.github.autoAi) await countDays(db, { userId: s.user.id, profileId: p.id }, r.trail, r.newCommitDays);
+    // com ela, a IA analisa em segundo plano (no máximo 1 vez por hora) e só os relevantes contam no Hábito
     const analyzing = r.trail.github && canAutoAnalyze(r.trail.github, new Date()) ? await startAnalysis(db, p, s.user.id, token, t.id) : false;
     return NextResponse.json({ ok: true, newCommits: r.newCommits, closed: r.closed.length, analyzing });
   } catch (e) {

@@ -15,7 +15,8 @@ interface TokenStatus {
   expiresAt?: string | null;
 }
 
-const post = (url: string, body: unknown) => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => ({})) }));
+const post = (url: string, body: unknown) =>
+  fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => ({})) }));
 
 /** "há 5 min", "há 3 h", "há 2 dias". */
 export function ago(iso: string | null | undefined): string {
@@ -42,7 +43,7 @@ export function GithubLink({ t, onChanged }: { t: Trail; onChanged(): Promise<un
     setMsg(null);
     const r = await post("/api/estudos/github/verificar", { trailId: t.id, ...body });
     setBusy(false);
-    if (!r.ok) return setMsg(r.body.error ?? "Não deu certo."), false;
+    if (!r.ok) return (setMsg(r.body.error ?? "Não deu certo."), false);
     if (body.unlink) setMsg(null);
     else if (r.body.newCommits || r.body.closed)
       setMsg(
@@ -127,8 +128,12 @@ export function GithubLink({ t, onChanged }: { t: Trail; onChanged(): Promise<un
         </div>
       </div>
       {msg && <p className="text-[12px] text-muted">{msg}</p>}
-      {!issues && <p className="text-[12px] text-muted">O repositório ainda não tem issues{g.label ? ` com o label "${g.label}"` : ""}. Crie uma issue para cada passo do projeto: aberta = a fazer, fechada = feito.</p>}
-      <Analysis t={t} running={running} busy={busy} onAnalyze={analyze} />
+      {!issues && (
+        <p className="text-[12px] text-muted">
+          O repositório ainda não tem issues{g.label ? ` com o label "${g.label}"` : ""}. Crie uma issue para cada passo do projeto: aberta = a fazer, fechada = feito.
+        </p>
+      )}
+      <Analysis t={t} running={running} busy={busy} onAnalyze={analyze} onAutoAi={(on) => verify({ autoAi: on })} />
       {g.commits.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-[11px] text-muted">Movimento recente</span>
@@ -150,26 +155,36 @@ export function GithubLink({ t, onChanged }: { t: Trail; onChanged(): Promise<un
 }
 
 /** O que a IA disse sobre os últimos commits: resumo, habilidades, issues que parecem prontas e próximo passo. */
-function Analysis({ t, running, busy, onAnalyze }: { t: Trail; running: boolean; busy: boolean; onAnalyze(): void }) {
+function Analysis({ t, running, busy, onAnalyze, onAutoAi }: { t: Trail; running: boolean; busy: boolean; onAnalyze(): void; onAutoAi(on: boolean): void }) {
   const g = t.github!;
   const a = g.analyses[0];
   const pending = g.lastSha && g.analyzedSha !== g.lastSha;
-  if (!a && !running && g.analysis.state !== "error" && !pending) return null;
   const url = (n: number) => t.units.find((u) => u.issue === n)?.url;
   return (
     <div className="flex flex-col gap-1.5 rounded-md bg-panel-2/60 p-2.5 text-[12px]">
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-[11px] text-accent-2">
           <Sparkles size={12} /> Análise da IA{a ? ` · ${ago(a.at)}` : ""}
-          {a && !a.relevant && <span className="text-muted">· ajuste pequeno, não conta no Hábito</span>}
+          {a && !a.relevant && <span className="text-muted">· ajuste pequeno{g.autoAi ? ", não conta no Hábito" : ""}</span>}
         </span>
-        <button disabled={busy || running} onClick={onAnalyze} className="btn-ghost flex items-center gap-1 px-2 py-0.5 text-[11px]">
-          {running ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} {running ? "Analisando…" : a && !pending ? "Analisar de novo" : "Analisar"}
-        </button>
+        <span className="flex items-center gap-2">
+          <label
+            className="flex items-center gap-1 text-[11px] text-muted"
+            title="Ligada, a IA lê os commits novos sozinha (no máximo 1 vez por hora) e só os relevantes contam no Hábito. Desligada, não gasta IA: os commits contam direto."
+          >
+            <input type="checkbox" checked={g.autoAi} disabled={busy} onChange={(e) => onAutoAi(e.target.checked)} /> automática
+          </label>
+          <button disabled={busy || running} onClick={onAnalyze} className="btn-ghost flex items-center gap-1 px-2 py-0.5 text-[11px]">
+            {running ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} {running ? "Analisando…" : a && !pending ? "Analisar de novo" : "Analisar"}
+          </button>
+        </span>
       </div>
+      {!g.autoAi && !running && !a && <p className="text-muted">A IA só lê o projeto quando você clicar em Analisar. Os commits contam no Hábito direto, sem gastar IA.</p>}
       {running && <p className="text-muted">O Claude Code está lendo os commits novos. Leva de 1 a 2 minutos.</p>}
-      {!running && g.analysis.state === "error" && <p className="text-down">A última análise falhou: {g.analysis.error?.replace(/\.?$/, ".")} Os commits que esperavam a análise contaram no Hábito assim mesmo.</p>}
-      {!running && !a && pending && g.analysis.state !== "error" && <p className="text-muted">Há commits ainda não analisados. A análise roda sozinha no máximo 1 vez por hora.</p>}
+      {!running && g.analysis.state === "error" && (
+        <p className="text-down">A última análise falhou: {g.analysis.error?.replace(/\.?$/, ".")} Os commits que esperavam a análise contaram no Hábito assim mesmo.</p>
+      )}
+      {g.autoAi && !running && !a && pending && g.analysis.state !== "error" && <p className="text-muted">Há commits ainda não analisados. A análise roda sozinha no máximo 1 vez por hora.</p>}
       {a && (
         <>
           <p>{a.summary}</p>
@@ -206,7 +221,7 @@ function Analysis({ t, running, busy, onAnalyze }: { t: Trail; running: boolean;
   );
 }
 
-/** Passo 1: colar o token (uma vez por conta). Passo 2: escolher o repositório. */
+/** Repositório público: liga só com o link. Privado: passo 1 cola o token (uma vez por conta), passo 2 escolhe o repositório. */
 function Connect({ onLink, onCancel, busy }: { onLink(repo: string, label: string): Promise<void>; onCancel(): void; busy: boolean }) {
   const [status, setStatus] = useState<TokenStatus | null>(null);
   const [token, setToken] = useState("");
@@ -249,7 +264,15 @@ function Connect({ onLink, onCancel, busy }: { onLink(repo: string, label: strin
     <div className="flex flex-col gap-2 rounded-md border border-border/60 p-3 text-[12px]">
       {!status.connected ? (
         <>
-          <p className="font-semibold">1. Crie um token do GitHub só de leitura</p>
+          <p className="font-semibold">Repositório público? Cole o link, sem token</p>
+          <div className="flex gap-2">
+            <input value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/dono/repositorio" className="min-w-0 flex-1" />
+            <button disabled={busy || !repo.trim()} onClick={() => onLink(repo, label)} className="btn-neon flex items-center gap-1 px-3 py-1.5 text-xs">
+              {busy && <Loader2 size={12} className="animate-spin" />} Ligar
+            </button>
+          </div>
+          <p className="text-muted">Sem token o app lê pela API pública do GitHub (60 leituras por hora), o bastante para verificar os seus projetos.</p>
+          <p className="mt-1 font-semibold">Privado? 1. Crie um token do GitHub só de leitura</p>
           <ol className="ml-4 list-decimal text-muted">
             <li>
               Abra{" "}

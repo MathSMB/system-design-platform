@@ -11,6 +11,7 @@ import {
   toCommit,
   type ApiCommit,
   type ApiIssue,
+  type ApiRepo,
   type GithubLink,
   type Trail,
   type TrailUnit,
@@ -64,20 +65,35 @@ export class GithubError extends Error {
   }
 }
 
-export async function gh<T>(token: string, path: string): Promise<{ data: T; headers: Headers }> {
+/**
+ * GET na API do GitHub. Sem token (null) usa a API pública: só lê repositório público,
+ * com limite de 60 leituras por hora por IP.
+ */
+export async function gh<T>(token: string | null, path: string): Promise<{ data: T; headers: Headers }> {
   // GITHUB_API_URL só existe para testar com um GitHub falso
   const r = await fetch(`${process.env.GITHUB_API_URL || "https://api.github.com"}${path}`, {
-    headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "system-design-lab-estudos" },
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+      "user-agent": "system-design-lab-estudos",
+    },
     cache: "no-store",
   });
   if (!r.ok) {
-    const msg =
-      r.status === 401
+    const limited = (r.status === 403 || r.status === 429) && r.headers.get("x-ratelimit-remaining") === "0";
+    const msg = limited
+      ? token
+        ? "O limite de leituras do GitHub acabou por agora. Tente de novo daqui a pouco."
+        : "Acabou o limite da API pública do GitHub (60 leituras por hora). Tente mais tarde ou cole um token."
+      : r.status === 401
         ? "O GitHub recusou o token (vencido ou apagado). Cole um novo."
         : r.status === 403
           ? "O token não tem acesso a isso. Confira se o repositório está na lista do token, com Contents, Issues e Metadata em leitura."
           : r.status === 404
-            ? "Repositório não encontrado (ou o token não tem acesso a ele)."
+            ? token
+              ? "Repositório não encontrado (ou o token não tem acesso a ele)."
+              : "Repositório não encontrado. Se ele for privado, cole um token do GitHub só de leitura."
             : `O GitHub respondeu ${r.status}.`;
     throw new GithubError(msg, r.status);
   }
@@ -96,7 +112,7 @@ export async function listRepos(token: string) {
   return data.map((r) => ({ repo: r.full_name, private: r.private, pushedAt: r.pushed_at, branch: r.default_branch }));
 }
 
-async function allIssues(token: string, repo: string): Promise<ApiIssue[]> {
+async function allIssues(token: string | null, repo: string): Promise<ApiIssue[]> {
   const out: ApiIssue[] = [];
   for (let page = 1; page <= 3; page++) {
     const { data } = await gh<ApiIssue[]>(token, `/repos/${repo}/issues?state=all&per_page=100&sort=created&direction=asc&page=${page}`);
@@ -108,7 +124,7 @@ async function allIssues(token: string, repo: string): Promise<ApiIssue[]> {
 
 export interface SyncResult {
   trail: Trail;
-  /** Commits novos (que contam como trabalho) por dia, desde a última verificação. */
+  /** Commits novos (que contam como trabalho) por dia, desde a última verificação. Sem a IA automática, contam direto no Hábito. */
   newCommitDays: Record<string, number>;
   newCommits: number;
   /** Passos que fecharam desde a última verificação. */
@@ -120,7 +136,7 @@ export interface SyncResult {
  * Na primeira vez só marca o ponto de partida: o histórico antigo aparece no movimento,
  * mas não vira evento para o Hábito.
  */
-export async function syncTrail(token: string, t: Trail, link: GithubLink): Promise<SyncResult> {
+export async function syncTrail(token: string | null, t: Trail, link: GithubLink): Promise<SyncResult> {
   const repo = link.repo;
   const branch = link.branch || (await gh<{ default_branch: string }>(token, `/repos/${repo}`)).data.default_branch;
   let fresh: ApiCommit[] = [];
@@ -161,8 +177,9 @@ export async function syncTrail(token: string, t: Trail, link: GithubLink): Prom
     commits: mergeCommits(link.commits, recent.filter(countsAsWork).map(toCommit)),
     // na primeira vez (ou num projeto ligado antes da análise existir) a IA começa daqui
     analyzedSha: link.analyzedSha ?? (link.lastSha || head),
-    // os dias com commit esperam a análise: só os relevantes contam no Hábito
-    pendingDays: mergeDays(link.pendingDays, newCommitDays),
+    // com a IA automática, os dias com commit esperam a análise (só os relevantes contam no Hábito);
+    // sem ela, a rota conta os dias direto
+    pendingDays: link.autoAi ? mergeDays(link.pendingDays, newCommitDays) : link.pendingDays,
   };
   return {
     trail: { ...t, github, units },
@@ -170,4 +187,11 @@ export async function syncTrail(token: string, t: Trail, link: GithubLink): Prom
     newCommits: work.length,
     closed,
   };
+}
+
+/** Lê o repositório e as linguagens, para importar um projeto que você já tinha. */
+export async function repoInfo(token: string | null, repo: string) {
+  const { data: meta } = await gh<ApiRepo>(token, `/repos/${repo}`);
+  const { data: languages } = await gh<Record<string, number>>(token, `/repos/${meta.full_name}/languages`).catch(() => ({ data: {} as Record<string, number> }));
+  return { meta, languages };
 }
