@@ -64,7 +64,8 @@ As até 8 habilidades mais pedidas que você não domina, ordenadas por `frequê
 - Ligado: cada issue vira um passo (aberta = a fazer, fechada = feito; PRs e "not planned" ficam de fora). Os passos do GitHub não têm check na plataforma: quem fecha é a issue. Repositório ainda sem issues mantém os passos à mão.
 - **Verificar:** botão no cartão e também sozinho ao abrir a página, se a última verificação tem mais de 10 min. Usa a API `compare` desde o último commit salvo (se ele sumiu por force-push, busca por data). Na primeira vez só marca o ponto de partida: o histórico aparece em "Movimento recente" (5 últimos commits), mas não conta no Hábito.
 - Merges e commits de robôs não contam. Desligar mantém os passos, que voltam a ser marcados à mão.
-- Hábito: cada dia com commit (`projeto.commits`) e cada passo concluído (`projeto.passo-concluido`, inclusive os à mão) contam na métrica "avanço no projeto", no dia do commit ou do fechamento da issue (até 7 dias para trás).
+- Hábito: cada dia com commit **relevante** (`projeto.commits`) e cada passo concluído (`projeto.passo-concluido`, inclusive os à mão) contam na métrica "avanço no projeto", no dia do commit ou do fechamento da issue (até 7 dias para trás). Os dias com commit ficam em `pendingDays` até a análise da IA: relevante → contam; ajuste pequeno → não contam; a IA falhou → contam assim mesmo.
+- **Análise da IA** (bloco no cartão): depois de um Verificar com commits novos, o Claude Code analisa sozinho em segundo plano (no máximo 1 vez por hora; o botão "Analisar" não espera; a tela consulta a cada 5 s). Recebe os commits de `analyzedSha` até `lastSha`, o diff cortado em ~30 KB (`diffDigest`: código, depois testes, depois o resto; sem lockfiles, builds e imagens), as issues, o objetivo da trilha e as habilidades da pesquisa. Devolve resumo, relevante, issues abertas que parecem prontas (só aviso, com link), habilidades praticadas (só nomes da pesquisa; sobem para "estudando") e próximo passo. Guarda as 5 últimas. Sem commit novo, "Analisar de novo" refaz a última. Grava `projeto.analisado`.
 
 ### Seção "Projetos para o portfólio"
 
@@ -169,7 +170,8 @@ Saída: `{ notes, outline[{week, focus}], items[{day, title, kind, minutes, trai
 | `POST /api/estudos/feito` | Marca/desmarca um bloco (hoje ou ontem) |
 | `GET/POST/DELETE /api/estudos/github` | Status do token (só `hint`, login e validade), salvar (confere com `GET /user`) e apagar |
 | `GET /api/estudos/github/repos` | Repositórios que o token enxerga |
-| `POST /api/estudos/github/verificar` | `{ trailId, repo?, label? }` liga e verifica; `{ trailId }` verifica; `{ trailId, unlink: true }` desliga. Grava `projeto.commits` e `projeto.passo-concluido` |
+| `POST /api/estudos/github/verificar` | `{ trailId, repo?, label? }` liga e verifica; `{ trailId }` verifica; `{ trailId, unlink: true }` desliga. Grava `projeto.passo-concluido` e, se puder, começa a análise (`analyzing: true`) |
+| `POST /api/estudos/github/analisar` | `{ trailId }` começa a análise da IA em segundo plano (409 se já roda ou não há o que analisar) |
 
 ## 5. Dados
 

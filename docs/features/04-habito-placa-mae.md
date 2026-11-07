@@ -35,7 +35,7 @@ A meta é uma lista de **itens** com modo **todos** ou **qualquer um**:
 
 | Tipo de item | Como conta |
 |---|---|
-| `platform` (automático) | Atividades feitas na plataforma, marcadas sozinhas: respostas avaliadas pela IA (`answers`), etapas de processo seletivo (`stages`), processos inteiros (`processes`), casos de system design avaliados (`designs`). Com alvo de 1 a 20 |
+| `platform` (automático) | Atividades feitas na plataforma, marcadas sozinhas: respostas avaliadas pela IA (`answers`), etapas de processo seletivo (`stages`), processos inteiros (`processes`), casos de system design avaliados (`designs`) e avanços em projetos do portfólio (`projects`: dia com commit relevante ou passo concluído, vindos da Central de estudos). Com alvo de 1 a 20 |
 | `manual` ("você marca") | Texto livre do seu tipo de estudo ("1 hora de Spring Boot"); você marca o check |
 | `schedule` (automático) | "Cumprir o cronograma do dia (Central de estudos)": cumprido quando todos os blocos do dia foram feitos (feature 3) |
 

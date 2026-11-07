@@ -1,7 +1,7 @@
 import type { Graph, SimResult } from "@sdp/sim-engine";
 import type { AnswerEvaluation, AnswerInput } from "./answer";
 import type { SessionFeedback, SessionInput } from "./session";
-import type { ResearchInput, ScheduleDraft, ScheduleInput, StudyChatInput, StudyChatReply, StudyContext } from "./study";
+import type { ProjectAnalysisInput, ResearchInput, ScheduleDraft, ScheduleInput, StudyChatInput, StudyChatReply, StudyContext } from "./study";
 
 export interface EvaluationInput {
   /** Enunciado do problema (ex. "Projete um encurtador de URL"). */
@@ -51,6 +51,8 @@ export interface AiProvider {
   studyChat(input: StudyChatInput): Promise<StudyChatReply>;
   /** 3 projetos de portfólio (JSON bruto, limpo depois com cleanProjects). */
   proposeProjects(input: StudyContext): Promise<unknown>;
+  /** Lê os commits novos de um projeto e diz o quanto andou (JSON bruto, limpo depois com fromAi). */
+  analyzeProject(input: ProjectAnalysisInput): Promise<unknown>;
   /** Cronograma dia a dia em blocos curtos. */
   planSchedule(input: ScheduleInput): Promise<ScheduleDraft>;
 }

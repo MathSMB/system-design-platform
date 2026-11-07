@@ -1,4 +1,4 @@
-import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext, type ChatAttachment } from "./study";
+import { ANALYSIS_SCHEMA, ANALYSIS_SYSTEM_PROMPT, buildAnalysisPrompt, type ProjectAnalysisInput, CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext, type ChatAttachment } from "./study";
 import { spawn } from "node:child_process";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
@@ -48,6 +48,10 @@ export class ClaudeCodeProvider implements AiProvider {
 
   async proposeProjects(input: StudyContext): Promise<unknown> {
     return ((await this.json(PROJECTS_SYSTEM_PROMPT, PROJECTS_SCHEMA, buildProjectsPrompt(input))) as { projects?: unknown })?.projects;
+  }
+
+  async analyzeProject(input: ProjectAnalysisInput): Promise<unknown> {
+    return this.json(ANALYSIS_SYSTEM_PROMPT, ANALYSIS_SCHEMA, buildAnalysisPrompt(input), { timeoutMs: 4 * 60_000 });
   }
 
   async planSchedule(input: ScheduleInput): Promise<ScheduleDraft> {

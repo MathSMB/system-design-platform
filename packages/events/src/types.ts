@@ -14,6 +14,7 @@ export const EVENT_TYPES = {
   "estudo.item-feito": "Um item do cronograma de estudos foi marcado como feito",
   "projeto.commits": "Commits novos num projeto de portfólio ligado ao GitHub",
   "projeto.passo-concluido": "Um passo de um projeto de portfólio foi concluído",
+  "projeto.analisado": "A IA analisou os commits novos de um projeto de portfólio",
 } as const;
 export type EventType = keyof typeof EVENT_TYPES;
 
@@ -47,4 +48,25 @@ export function parseEvent(b: unknown): NewEvent | string {
   const payload = (o.payload ?? {}) as Record<string, unknown>;
   if (JSON.stringify(payload).length > 8000) return "payload grande demais (máx. 8 KB).";
   return { type: o.type, ref: typeof o.ref === "string" ? o.ref.trim().slice(0, 120) : null, payload };
+}
+
+/** Texto legível de um evento para a lista do Painel (cai na descrição do tipo quando falta dado). */
+export function describeEvent(type: string, payload: unknown): string {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const text = (k: string) => (typeof p[k] === "string" ? (p[k] as string).trim() : "");
+  const repoName = (text("repo").split("/")[1] ?? "") || text("trail");
+  switch (type) {
+    case "projeto.commits": {
+      const n = Number(p.commits) || 0;
+      return repoName && n ? `${n} commit${n === 1 ? "" : "s"} em ${repoName}` : EVENT_TYPES[type];
+    }
+    case "projeto.passo-concluido":
+      return text("step") ? `Passo concluído${repoName ? ` em ${repoName}` : ""}: ${text("step")}` : EVENT_TYPES[type];
+    case "projeto.analisado":
+      return repoName ? `IA analisou ${repoName}${p.relevant === false ? " (ajuste pequeno)" : ""}` : EVENT_TYPES[type];
+    case "estudo.item-feito":
+      return text("title") ? `Bloco do cronograma feito: ${text("title")}` : EVENT_TYPES[type];
+    default:
+      return isEventType(type) ? EVENT_TYPES[type] : type;
+  }
 }

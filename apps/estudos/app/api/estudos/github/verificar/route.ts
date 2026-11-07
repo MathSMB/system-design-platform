@@ -1,8 +1,9 @@
 import { dayInBrazil } from "@sdp/habit";
-import { cleanGithub, parseRepo, type Trail } from "@sdp/study";
+import { canAutoAnalyze, cleanGithub, parseRepo, type Trail } from "@sdp/study";
 import { NextResponse } from "next/server";
 import { getDb } from "@sdp/db";
 import { emitAsUser, getSession } from "@sdp/auth";
+import { startAnalysis } from "@/lib/analysis";
 import { GithubError, loadToken, syncTrail } from "@/lib/github";
 import { loadCenter, saveCenter } from "@/lib/study";
 
@@ -50,13 +51,13 @@ export async function POST(req: Request) {
     const r = await syncTrail(token, t, link);
     await save(r.trail);
     const repo = link.repo;
-    for (const [day, n] of Object.entries(r.newCommitDays))
-      await emitAsUser("estudos", { type: "projeto.commits", ref: `${t.id}:${day}`, payload: { day, repo, trail: t.title.slice(0, 120), commits: n } });
     for (const u of r.closed) {
       const day = u.doneAt ? dayInBrazil(new Date(u.doneAt)) : dayInBrazil();
       await emitAsUser("estudos", { type: "projeto.passo-concluido", ref: `${t.id}#${u.issue}`, payload: { day, repo, trail: t.title.slice(0, 120), step: u.title, url: u.url ?? null } });
     }
-    return NextResponse.json({ ok: true, trail: r.trail, newCommits: r.newCommits, closed: r.closed.length });
+    // commits novos: a IA analisa em segundo plano (no máximo 1 vez por hora) e só os relevantes contam no Hábito
+    const analyzing = r.trail.github && canAutoAnalyze(r.trail.github, new Date()) ? await startAnalysis(db, p, s.user.id, token, t.id) : false;
+    return NextResponse.json({ ok: true, newCommits: r.newCommits, closed: r.closed.length, analyzing });
   } catch (e) {
     return NextResponse.json({ error: e instanceof GithubError ? e.message : `Não consegui falar com o GitHub: ${e instanceof Error ? e.message : e}` }, { status: 502 });
   }
