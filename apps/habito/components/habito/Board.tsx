@@ -2,7 +2,7 @@
 
 import { PARTS, type Board as BoardState } from "@sdp/habit";
 import { useEffect, useMemo, useRef } from "react";
-import { boardSvg } from "./board";
+import { boardSvg } from "./boardSvg";
 import { BoardFx, PART_AT, WEAR_AT, WEAR_HIT } from "./boardFx";
 
 const KEY = (profileId: string) => `sdp-placa-${profileId}`;
