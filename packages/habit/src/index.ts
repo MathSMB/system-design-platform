@@ -10,24 +10,27 @@
 // ---------------------------------------------------------------------------
 
 /** O que a plataforma conta sozinha. */
-export type ActivityKind = "answer" | "stage" | "process" | "design";
-export const ACTIVITY_KINDS: ActivityKind[] = ["answer", "stage", "process", "design"];
+export type ActivityKind = "answer" | "stage" | "process" | "design" | "project";
+export const ACTIVITY_KINDS: ActivityKind[] = ["answer", "stage", "process", "design", "project"];
 
 export interface DayCounts {
   answers: number;
   stages: number;
   processes: number;
   designs: number;
+  /** Dias com commit ou passo concluído num projeto de portfólio (Central de estudos). */
+  projects: number;
 }
-export const EMPTY: DayCounts = { answers: 0, stages: 0, processes: 0, designs: 0 };
+export const EMPTY: DayCounts = { answers: 0, stages: 0, processes: 0, designs: 0, projects: 0 };
 
 export type Metric = keyof DayCounts;
 /** `app` + `href`: onde fazer (cada app tem a sua porta; quem mostra o link monta o endereço). */
-export const METRICS: { id: Metric; one: string; many: string; app: "entrevista" | "system-design"; href: string }[] = [
+export const METRICS: { id: Metric; one: string; many: string; app: "entrevista" | "system-design" | "estudos"; href: string }[] = [
   { id: "answers", one: "resposta avaliada pela IA", many: "respostas avaliadas pela IA", app: "entrevista", href: "/java" },
   { id: "stages", one: "etapa do processo seletivo", many: "etapas do processo seletivo", app: "entrevista", href: "/processo-seletivo" },
   { id: "processes", one: "processo seletivo inteiro", many: "processos seletivos inteiros", app: "entrevista", href: "/processo-seletivo" },
   { id: "designs", one: "caso de system design avaliado", many: "casos de system design avaliados", app: "system-design", href: "/entrevista/system-design" },
+  { id: "projects", one: "avanço no projeto (commit ou passo concluído)", many: "avanços no projeto (commits ou passos concluídos)", app: "estudos", href: "/#trilhas" },
 ];
 export const isMetric = (x: unknown): x is Metric => METRICS.some((m) => m.id === x);
 
@@ -356,7 +359,7 @@ export function computeHabit(opts: {
 
 /** Intensidade de 0 a 4 para o calendário do ano (estilo GitHub). */
 export function intensity(plan: Plan, c: DayCounts, checks: readonly string[] = []): 0 | 1 | 2 | 3 | 4 {
-  const total = c.answers + c.stages * 3 + (c.processes + c.designs) * 6 + checks.length * 3;
+  const total = c.answers + c.stages * 3 + (c.processes + c.designs) * 6 + (c.projects ?? 0) * 3 + checks.length * 3;
   if (!total) return 0;
   if (!meets(plan, c, checks)) return 1;
   const extra = plan.items.filter((i) => i.kind === "platform").reduce((s, i) => s + (i.kind === "platform" ? Math.floor(c[i.metric] / i.target) : 0), 0);

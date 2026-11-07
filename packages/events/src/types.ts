@@ -12,6 +12,8 @@ export const EVENT_TYPES = {
   "processo.concluido": "Um processo seletivo terminou (contratado ou eliminado)",
   "design.avaliado": "Um desenho de system design foi avaliado pela IA",
   "estudo.item-feito": "Um item do cronograma de estudos foi marcado como feito",
+  "projeto.commits": "Commits novos num projeto de portfólio ligado ao GitHub",
+  "projeto.passo-concluido": "Um passo de um projeto de portfólio foi concluído",
 } as const;
 export type EventType = keyof typeof EVENT_TYPES;
 
@@ -26,11 +28,13 @@ export interface NewEvent {
 }
 
 /** Tipo de atividade do hábito que cada evento conta (o app Hábito lê isto). */
-export const ACTIVITY_OF: Partial<Record<EventType, "answer" | "stage" | "process" | "design">> = {
+export const ACTIVITY_OF: Partial<Record<EventType, "answer" | "stage" | "process" | "design" | "project">> = {
   "resposta.avaliada": "answer",
   "etapa.concluida": "stage",
   "processo.concluido": "process",
   "design.avaliado": "design",
+  "projeto.commits": "project",
+  "projeto.passo-concluido": "project",
 };
 
 /** Confere o corpo de um POST /api/eventos. Volta o evento limpo ou a mensagem de erro. */

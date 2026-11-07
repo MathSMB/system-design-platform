@@ -199,3 +199,18 @@ export const eventCursors = pgTable("event_cursors", {
 });
 
 export type EventRow = typeof events.$inferSelect;
+
+/**
+ * Token do GitHub (fine-grained, só leitura) de cada conta, criptografado com AES-256-GCM.
+ * Nunca volta para o navegador: a tela vê só `hint` (os 4 últimos caracteres) e o login.
+ */
+export const githubTokens = pgTable("github_tokens", {
+  userId: uuid("user_id").primaryKey(),
+  /** "iv.tag.cifra", tudo em base64url. */
+  tokenEnc: text("token_enc").notNull(),
+  hint: text("hint").notNull(),
+  login: text("login"),
+  /** Validade do token, quando o GitHub informa (cabeçalho github-authentication-token-expiration). */
+  expiresAt: text("expires_at"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -8,7 +8,7 @@ import { activities, checkins, studyCenters } from "@sdp/db";
 import { getSession } from "@sdp/auth";
 import { syncActivities } from "@/lib/sync";
 
-const FIELD = { answer: "answers", stage: "stages", process: "processes", design: "designs" } as const;
+const FIELD = { answer: "answers", stage: "stages", process: "processes", design: "designs", project: "projects" } as const;
 
 /** A placa-mãe do perfil ativo: peças, desgaste, ofensiva, failovers e o último ano. */
 export async function GET() {

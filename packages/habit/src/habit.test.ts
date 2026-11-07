@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BURN_LEVEL, cleanHistory, withChange, GOALS, PARTS, addDays, cleanPlan, computeHabit, dayInBrazil, intensity, meets, planOf, planText, weekOf, type DayCounts, type Plan } from "./index";
 
-const A = (answers: number, extra: Partial<DayCounts> = {}): DayCounts => ({ answers, stages: 0, processes: 0, designs: 0, ...extra });
+const A = (answers: number, extra: Partial<DayCounts> = {}): DayCounts => ({ answers, stages: 0, processes: 0, designs: 0, projects: 0, ...extra });
 const leve = planOf("leve");
 const start = "2026-11-02"; // segunda
 
