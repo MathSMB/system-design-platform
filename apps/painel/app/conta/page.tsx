@@ -27,7 +27,7 @@ export default async function Page() {
           <h1 className="mt-3 font-display text-xl leading-relaxed">
             Entre na sua <span className="text-ok glow">conta.</span>
           </h1>
-          <p className="mt-3 mb-6 text-muted">Uma conta só para os quatro apps: System Design, Entrevista, Estudos e Hábito.</p>
+          <p className="mt-3 mb-6 text-muted">Uma conta só para os cinco apps: System Design, Entrevista, Estudos, Hábito e Pair Programming.</p>
         </>
       )}
       <Account />

@@ -1,5 +1,5 @@
 // Prints das telas reais para as seções da apresentação de cada app.
-// Uso: node scripts/demos/prints.mjs <cookie> <profileId>  (rode semear.mjs e semear-estudos.mjs antes)
+// Uso: node scripts/demos/prints.mjs <cookie> <profileId>  (rode semear.mjs, semear-estudos.mjs e semear-pair.mjs antes)
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -20,7 +20,7 @@ const HIDE = "nextjs-portal{display:none!important}";
 async function page(app, { login = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5 });
   if (login) await ctx.addCookies([{ name: "sdl_session", value: cookie, domain: "localhost", path: "/" }]);
-  await ctx.addInitScript(`try{["system-design","entrevista","estudos","habito"].forEach(k=>localStorage.setItem("sdl:intro:"+k,"visto"));localStorage.setItem("sdp-tour-canvas-v1","done")}catch{}`);
+  await ctx.addInitScript(`try{["system-design","entrevista","estudos","habito","pair"].forEach(k=>localStorage.setItem("sdl:intro:"+k,"visto"));localStorage.setItem("sdp-tour-canvas-v1","done")}catch{}`);
   const p = await ctx.newPage();
   p.on("load", () => p.addStyleTag({ content: HIDE }).catch(() => {}));
   return p;
@@ -233,5 +233,55 @@ if (!only || only === "habito") {
     }
     await p.context().close();
   }
+}
+// ---------------- Pair Programming ----------------
+if (!only || only === "pair") {
+  const p = await page("pair", { login: true });
+  // a pasta do exemplo é do Windows: aqui ela aparece como ligada
+  await p.route("**/api/pair/conversas?id=*", async (r) => {
+    const j = await (await r.fetch()).json();
+    if (j.chat?.setup?.folder) j.chat.folderOk = true;
+    await r.fulfill({ json: j });
+  });
+  const chat = p.locator("#pair-chat");
+  const msgs = p.locator("#pair-chat .pair-msgs");
+  await p.goto("http://localhost:3005/", { waitUntil: "networkidle" });
+  await p.waitForSelector("#pair-conversas");
+  await p.evaluate(() => scrollTo(0, document.querySelector("#pair-conversas").getBoundingClientRect().top + scrollY - 16));
+  await p.waitForTimeout(400);
+  await shot(p, "pair", "conversas", "#pair-conversas", 0);
+
+  // um passo do ambiente (JAVA_HOME), do começo da resposta
+  await p.click("text=Configurar o meu ambiente Java");
+  await p.waitForSelector("text=Variáveis de Ambiente…");
+  await p.waitForTimeout(900);
+  await msgs.evaluate((el) => el.scrollTo({ top: [...el.querySelectorAll(".md")].at(-1).getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12 }));
+  await p.waitForTimeout(400);
+  await shot(p, "pair", "passo", chat, 0);
+
+  // código com uma linha clicada e a explicação
+  await p.click("text=Criar a API de transferências");
+  await p.waitForSelector("text=Parte por parte");
+  await p.waitForTimeout(900);
+  const line = p.locator(".code-line", { hasText: '@GetMapping("/{id}")' }).first();
+  await msgs.evaluate((el, y) => el.scrollTo({ top: y }), await line.evaluate((n) => { const m = n.closest(".pair-msgs"); return n.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - 260; }));
+  await line.hover();
+  await p.waitForTimeout(400);
+  await shot(p, "pair", "linha", chat, 0);
+
+  // o roteiro aberto
+  await p.locator("#pair-chat button", { hasText: "Criar o primeiro endpoint" }).first().click();
+  await p.waitForTimeout(500);
+  await shot(p, "pair", "roteiro", p.locator("#pair-chat > div").first(), 0);
+
+  // conversa nova ligada a um projeto dos Estudos e à pasta
+  await p.getByRole("button", { name: /nova conversa/i }).click();
+  await p.getByText("Ligar aos Estudos e à pasta do projeto").click();
+  await p.locator("#pair-nova select").selectOption("tproj");
+  await p.getByRole("button", { name: "Java + Spring Boot" }).click();
+  await p.fill("#pair-nova input[placeholder^='C:']", "C:\\Users\\matheus\\projetos\\api-pagamentos");
+  await p.waitForTimeout(400);
+  await shot(p, "pair", "nova", "#pair-nova", 0);
+  await p.context().close();
 }
 await browser.close();

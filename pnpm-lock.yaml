@@ -265,6 +265,70 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
+  apps/pair:
+    dependencies:
+      '@sdp/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
+      '@sdp/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@sdp/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@sdp/events':
+        specifier: workspace:*
+        version: link:../../packages/events
+      '@sdp/habit':
+        specifier: workspace:*
+        version: link:../../packages/habit
+      '@sdp/hiring':
+        specifier: workspace:*
+        version: link:../../packages/hiring
+      '@sdp/study':
+        specifier: workspace:*
+        version: link:../../packages/study
+      '@sdp/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      drizzle-orm:
+        specifier: 0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.5.11)(@opentelemetry/api@1.10.0)(postgres@3.4.9)
+      lucide-react:
+        specifier: 1.55.0
+        version: 1.55.0(@types/react@19.3.0)(react@19.3.1)
+      next:
+        specifier: 16.4.3
+        version: 16.4.3(@opentelemetry/api@1.10.0)(@types/node@22.18.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      react:
+        specifier: 19.3.1
+        version: 19.3.1
+      react-dom:
+        specifier: 19.3.1
+        version: 19.3.1(react@19.3.1)
+      server-only:
+        specifier: 0.0.1
+        version: 0.0.1
+    devDependencies:
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
+      '@types/node':
+        specifier: 22.18.0
+        version: 22.18.0
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      tailwindcss:
+        specifier: 4.3.3
+        version: 4.3.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   apps/system-design:
     dependencies:
       '@sdp/ai':

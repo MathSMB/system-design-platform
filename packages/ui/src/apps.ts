@@ -8,6 +8,7 @@ export const APP_LIST = [
   { id: "entrevista", title: "Entrevista", port: 3002, color: "bad", body: "Processo seletivo do RH à contratação e treino por stack, com a IA e o seu histórico." },
   { id: "estudos", title: "Estudos", port: 3003, color: "accent-2", body: "Do anúncio da vaga à meta de hoje: pesquisa, trilhas, projetos e cronograma." },
   { id: "habito", title: "Hábito", port: 3004, color: "ok", body: "A placa-mãe neon: cada dia de meta cumprida instala, repara ou faz overclock." },
+  { id: "pair", title: "Pair Programming", port: 3005, color: "warn", body: "Um mentor de IA que programa do seu lado: ambiente, Git e código linha por linha, um passo de cada vez." },
 ] as const;
 
 export type AppId = (typeof APP_LIST)[number]["id"];

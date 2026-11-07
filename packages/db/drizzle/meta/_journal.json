@@ -36,6 +36,13 @@
       "when": 1794052336965,
       "tag": "0004_estudos_historico",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794066999450,
+      "tag": "0005_pair_programming",
+      "breakpoints": true
     }
   ]
 }
