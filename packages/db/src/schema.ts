@@ -148,6 +148,10 @@ export const studyCenters = pgTable("study_centers", {
   skillStatus: jsonb("skill_status"),
   /** O cronograma atual (itens por dia) e o esboço das próximas semanas. */
   schedule: jsonb("schedule"),
+  /** O cargo montado passo a passo: { area, focus, back, front, option, level }. */
+  roleSpec: jsonb("role_spec"),
+  /** A pesquisa do histórico que o cronograma usa (study_research.id). */
+  researchId: uuid("research_id"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -167,6 +171,105 @@ export const roleResearch = pgTable("role_research", {
 
 export type StudyCenter = typeof studyCenters.$inferSelect;
 export type RoleResearchRow = typeof roleResearch.$inferSelect;
+
+/**
+ * Histórico de pesquisas de vaga de cada perfil: uma linha por pesquisa, com tudo o que
+ * ela gerou. Nada é sobrescrito; você escolhe qual delas o cronograma usa.
+ */
+export const studyResearch = pgTable(
+  "study_research",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: uuid("profile_id").notNull(),
+    role: text("role").notNull(),
+    level: text("level").notNull(),
+    /** O cargo montado, quando veio do montador. */
+    roleSpec: jsonb("role_spec"),
+    /** "running" | "done" | "error" */
+    status: text("status").notNull(),
+    /** A pesquisa inteira (RoleResearch): habilidades, resumo, faixa, perguntas, fontes. */
+    data: jsonb("data"),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Dia em Brasília (AAAA-MM-DD) em que terminou. */
+    researchedAt: text("researched_at"),
+  },
+  (t) => [index("study_research_profile").on(t.profileId, t.startedAt)],
+);
+
+/** Uma conversa com a IA da Central de estudos. */
+export const studyChats = pgTable(
+  "study_chats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: uuid("profile_id").notNull(),
+    /** A primeira frase dele, para achar a conversa na lista. */
+    title: text("title").notNull().default(""),
+    /** Resumo curto da conversa, atualizado pela IA: vai no lugar das mensagens antigas (economiza token). */
+    summary: text("summary").notNull().default(""),
+    /** A IA está respondendo desde (para a tela mostrar e esperar, mesmo se a janela fechou). */
+    pendingSince: timestamp("pending_since", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("study_chats_profile").on(t.profileId, t.updatedAt)],
+);
+
+/** Cada mensagem de uma conversa. */
+export const studyChatMessages = pgTable(
+  "study_chat_messages",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    chatId: uuid("chat_id").notNull(),
+    /** "user" | "assistant" */
+    role: text("role").notNull(),
+    text: text("text").notNull(),
+    /** O que veio junto: { action, trail, used, attachments: [ids] }. */
+    data: jsonb("data").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("study_chat_messages_chat").on(t.chatId, t.id)],
+);
+
+/** Print ou PDF anexado numa conversa. O arquivo fica numa pasta local; aqui vai o caminho e o que a IA leu dele. */
+export const studyAttachments = pgTable(
+  "study_attachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: uuid("profile_id").notNull(),
+    chatId: uuid("chat_id"),
+    name: text("name").notNull(),
+    mime: text("mime").notNull(),
+    size: bigint("size", { mode: "number" }).notNull(),
+    /** Caminho do arquivo na pasta de anexos (relativo a ela). */
+    path: text("path").notNull(),
+    /** O que a IA leu do anexo na primeira vez: as mensagens seguintes usam isso, sem reenviar o arquivo. */
+    extracted: text("extracted"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("study_attachments_chat").on(t.chatId)],
+);
+
+/** Cada versão do cronograma gerada, com a pesquisa usada, o tempo livre e o "ideal x real". */
+export const studySchedules = pgTable(
+  "study_schedules",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    profileId: uuid("profile_id").notNull(),
+    researchId: uuid("research_id"),
+    availability: jsonb("availability").notNull(),
+    schedule: jsonb("schedule").notNull(),
+    /** Ritmo calculado e dicas da IA para chegar perto do ideal. */
+    pace: jsonb("pace"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("study_schedules_profile").on(t.profileId, t.createdAt)],
+);
+
+export type StudyResearchRow = typeof studyResearch.$inferSelect;
+export type StudyChat = typeof studyChats.$inferSelect;
+export type StudyChatMessage = typeof studyChatMessages.$inferSelect;
+export type StudyAttachment = typeof studyAttachments.$inferSelect;
 
 /**
  * Eventos entre os apps (tabela outbox). Cada app grava aqui o que aconteceu

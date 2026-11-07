@@ -1,9 +1,10 @@
-import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext } from "./study";
+import { CHAT_SCHEMA, CHAT_SYSTEM_PROMPT, PROJECTS_SCHEMA, PROJECTS_SYSTEM_PROMPT, RESEARCH_SCHEMA, RESEARCH_SYSTEM_PROMPT, SCHEDULE_SCHEMA, SCHEDULE_SYSTEM_PROMPT, buildChatPrompt, buildProjectsPrompt, buildResearchPrompt, buildSchedulePrompt, normalizeChat, normalizeSchedule, type ResearchInput, type ScheduleDraft, type ScheduleInput, type StudyChatInput, type StudyChatReply, type StudyContext, type ChatAttachment } from "./study";
 import Anthropic from "@anthropic-ai/sdk";
 import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer, type AnswerEvaluation, type AnswerInput } from "./answer";
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
 import { SESSION_SCHEMA, SESSION_SYSTEM_PROMPT, buildSessionPrompt, normalizeSession, type SessionFeedback, type SessionInput } from "./session";
 import type { AiProvider, Evaluation, EvaluationInput } from "./types";
+import { attachmentBlock } from "./claude-code";
 
 /**
  * Usa a API da Anthropic (chave em ANTHROPIC_API_KEY). Necessário se o app for
@@ -35,7 +36,7 @@ export class AnthropicApiProvider implements AiProvider {
   }
 
   async studyChat(input: StudyChatInput): Promise<StudyChatReply> {
-    return normalizeChat(await this.json(CHAT_SYSTEM_PROMPT, CHAT_SCHEMA, buildChatPrompt(input), { web: true, timeoutMs: 5 * 60_000 }));
+    return normalizeChat(await this.json(CHAT_SYSTEM_PROMPT, CHAT_SCHEMA, buildChatPrompt(input), { web: true, timeoutMs: 5 * 60_000, attachments: input.attachments }));
   }
 
   async proposeProjects(input: StudyContext): Promise<unknown> {
@@ -46,7 +47,8 @@ export class AnthropicApiProvider implements AiProvider {
     return normalizeSchedule(await this.json(SCHEDULE_SYSTEM_PROMPT, SCHEDULE_SCHEMA, buildSchedulePrompt(input), { timeoutMs: 6 * 60_000 }));
   }
 
-  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number } = {}): Promise<unknown> {
+  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number; attachments?: ChatAttachment[] } = {}): Promise<unknown> {
+    const content = o.attachments?.length ? [{ type: "text", text: prompt }, ...o.attachments.map(attachmentBlock)] : prompt;
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 16000,
@@ -56,7 +58,7 @@ export class AnthropicApiProvider implements AiProvider {
         effort: "medium",
         format: { type: "json_schema", schema: schema as unknown as Record<string, unknown> },
       },
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: content as any }],
     });
     if (response.stop_reason === "refusal") throw new Error("O modelo recusou avaliar este conteúdo.");
     const text = response.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");

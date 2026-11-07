@@ -8,6 +8,7 @@ import { addDays } from "@sdp/habit";
 import { cleanGithub, type GithubLink } from "./github";
 
 export * from "./github";
+export * from "./role";
 
 // ---------------------------------------------------------------------------
 // Helpers de limpeza (os dados vêm da tela ou da IA)
@@ -137,10 +138,15 @@ export interface Trail {
   why: string;
   /** 3 = essencial para a vaga; 1 = quando sobrar tempo. */
   importance: 1 | 2 | 3;
-  /** Quantas vezes por semana entra no cronograma (não precisa ser todo dia). */
+  /**
+   * Antigo: vezes por semana e minutos por sessão. Agora quem decide o ritmo é o cronograma;
+   * os campos ficam só para as trilhas antigas continuarem válidas.
+   */
   perWeek: number;
-  /** Minutos de cada sessão: blocos curtos cabem nos tempos pequenos do dia. */
   sessionMin: number;
+  /** Horas estimadas para a trilha inteira (a IA estima; você pode corrigir). null = sem estimativa. */
+  hours: number | null;
+  /** Data fixa de verdade (prova da certificação, fim da matéria da pós), se houver. */
   deadline: string | null;
   skills: string[];
   units: TrailUnit[];
@@ -177,6 +183,7 @@ export function cleanTrail(x: unknown, id?: string): Trail | null {
     importance: num(o.importance, 1, 3, 2) as 1 | 2 | 3,
     perWeek: num(o.perWeek, 1, 7, 2),
     sessionMin: num(o.sessionMin, 10, 120, 25),
+    hours: num(o.hours, 0, 2000, 0) || null,
     deadline: isDay(o.deadline) ? o.deadline : null,
     skills: strings(o.skills, 12, 60),
     units,
@@ -221,7 +228,7 @@ export function cleanProjects(x: unknown): ProjectOption[] {
 }
 
 export function projectToTrail(p: ProjectOption, id?: string): Trail {
-  return cleanTrail({ kind: "projeto", title: p.title, why: p.pitch, importance: 3, perWeek: 3, sessionMin: 30, skills: p.skills, units: p.deliverables }, id)!;
+  return cleanTrail({ kind: "projeto", title: p.title, why: p.pitch, importance: 3, perWeek: 3, sessionMin: 30, hours: p.weeks * 4, skills: p.skills, units: p.deliverables }, id)!;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +301,8 @@ export interface Schedule {
   /** Esboço das semanas seguintes, até a data alvo. */
   outline: { week: string; focus: string }[];
   notes: string;
+  /** Dicas da IA para chegar perto do ritmo ideal. */
+  tips?: string[];
 }
 
 /** Dias que o cronograma detalha de cada vez (o resto fica no esboço). */
@@ -346,6 +355,7 @@ export function cleanSchedule(x: unknown): Schedule | null {
     items,
     outline: list(o.outline).map((w) => ({ week: str((w as any)?.week, 40), focus: str((w as any)?.focus, 300) })).filter((w) => w.focus).slice(0, 26),
     notes: str(o.notes, 1200),
+    tips: strings(o.tips, 5, 300),
   };
 }
 
@@ -430,3 +440,79 @@ export function gaps(skills: Skill[], levels: Record<string, SkillLevel>, n = 8)
     .sort((a, b) => b.frequency * (2 - (levels[b.name] ?? 0)) - a.frequency * (2 - (levels[a.name] ?? 0)))
     .slice(0, n);
 }
+
+// ---------------------------------------------------------------------------
+// Ritmo: o seu tempo (real) e o que seria o ideal para chegar na data alvo
+// ---------------------------------------------------------------------------
+
+export interface Pace {
+  /** Horas que faltam nas trilhas com estimativa (proporcional às unidades pendentes). */
+  remainingHours: number;
+  /** Trilhas sem estimativa de horas (não entram na conta). */
+  unknown: string[];
+  /** Minutos por semana que o cronograma pode usar (já sem a folga). */
+  weeklyMin: number;
+  /** Quando termina tudo no seu ritmo. null = sem tempo livre ou nada a fazer. */
+  finishDate: string | null;
+  targetDate: string | null;
+  /** Minutos por semana para terminar até a data alvo. null = sem data alvo. */
+  idealWeeklyMin: number | null;
+  /** true = no seu tempo dá para chegar na data alvo. */
+  onTrack: boolean | null;
+}
+
+/** Horas que faltam numa trilha. */
+export function trailRemainingHours(t: Trail): number {
+  if (!t.hours) return 0;
+  if (!t.units.length) return t.hours;
+  return (t.hours * t.units.filter((u) => !u.done).length) / t.units.length;
+}
+
+export function pace(trails: Trail[], av: Availability, today: string): Pace {
+  const open = trails.filter((t) => !t.units.length || t.units.some((u) => !u.done));
+  const remainingHours = Math.round(open.reduce((a, t) => a + trailRemainingHours(t), 0) * 10) / 10;
+  const unknown = open.filter((t) => !t.hours).map((t) => t.title);
+  const weeklyMin = Math.floor(av.minutes.reduce((a, m) => a + m, 0) * (1 - av.slack));
+  const finishDate = remainingHours > 0 && weeklyMin > 0 ? addDays(today, Math.ceil(((remainingHours * 60) / weeklyMin) * 7)) : null;
+  const targetDate = av.targetDate && av.targetDate > today ? av.targetDate : null;
+  let idealWeeklyMin: number | null = null;
+  if (targetDate && remainingHours > 0) {
+    const days = Math.max(1, Math.round((Date.parse(`${targetDate}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 86_400_000));
+    idealWeeklyMin = Math.ceil((remainingHours * 60) / (days / 7) / 5) * 5;
+  }
+  const onTrack = targetDate && remainingHours > 0 ? !!finishDate && finishDate <= targetDate : null;
+  return { remainingHours, unknown, weeklyMin, finishDate, targetDate, idealWeeklyMin, onTrack };
+}
+
+/** "5h30" a partir de minutos. */
+export const hm = (min: number) => `${Math.floor(min / 60)}h${String(Math.round(min % 60)).padStart(2, "0")}`;
+
+// ---------------------------------------------------------------------------
+// Conversas com a IA
+// ---------------------------------------------------------------------------
+
+/** Depois de tanto tempo parada, abrir a janela começa uma conversa limpa (a antiga fica no histórico). */
+export const CHAT_FRESH_MS = 3 * 60 * 60_000;
+/** Quantas mensagens recentes vão inteiras para a IA; as mais antigas vão no resumo. */
+export const CHAT_RECENT = 10;
+/** Se a IA está "respondendo" há mais que isso, travou (o servidor caiu): libera a conversa. */
+export const CHAT_STUCK_MS = 6 * 60_000;
+
+export const chatTitle = (text: string) => {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length > 70 ? `${t.slice(0, 67)}…` : t;
+};
+
+// ---------------------------------------------------------------------------
+// Anexos
+// ---------------------------------------------------------------------------
+
+export const ATTACH_TYPES: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+};
+export const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
+export const ATTACH_MAX_PER_MESSAGE = 3;

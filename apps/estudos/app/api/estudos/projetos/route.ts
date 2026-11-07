@@ -1,10 +1,10 @@
 import { createProvider } from "@sdp/ai";
 import { addDays, dayInBrazil } from "@sdp/habit";
-import { cleanProjects, type RoleResearch } from "@sdp/study";
+import { cleanProjects } from "@sdp/study";
 import { NextResponse } from "next/server";
 import { getDb } from "@sdp/db";
 import { getSession } from "@sdp/auth";
-import { contextOf, loadCenter, loadResearch, saveCenter, scheduleChecks } from "@/lib/study";
+import { activeResearch, contextOf, loadCenter, saveCenter, scheduleChecks } from "@/lib/study";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -16,10 +16,10 @@ export async function POST() {
   if (!db || !s?.profile) return NextResponse.json({ error: "Entre na sua conta e escolha um perfil." }, { status: 401 });
   const p = s.profile;
   const c = await loadCenter(db, p);
-  const r = await loadResearch(db, c.role, p.level);
-  if (r?.status !== "done" && !r?.data) return NextResponse.json({ error: "Faça a pesquisa da vaga primeiro: os projetos saem dela." }, { status: 400 });
+  const { data } = await activeResearch(db, p, c);
+  if (!data) return NextResponse.json({ error: "Faça a pesquisa da vaga primeiro: os projetos saem dela." }, { status: 400 });
   try {
-    const ctx = await contextOf(db, p, c, r.data as RoleResearch, await scheduleChecks(db, p.id, addDays(dayInBrazil(), -30)));
+    const ctx = await contextOf(db, p, c, data, await scheduleChecks(db, p.id, addDays(dayInBrazil(), -30)));
     const projects = cleanProjects(await createProvider().proposeProjects(ctx));
     if (!projects.length) throw new Error("A IA não devolveu projetos. Tente de novo.");
     await saveCenter(db, p.id, { projectOptions: projects });

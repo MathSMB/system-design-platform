@@ -1,10 +1,11 @@
 import { addDays, dayInBrazil } from "@sdp/habit";
 import { trackTitle, type Level } from "@sdp/hiring";
-import { cleanTrail, gaps, needsReplan, projectToTrail, readiness, skillLevels, MAX_TRAILS, MAX_UNITS, cleanAvailability, type RoleResearch } from "@sdp/study";
+import { cleanRoleSpec, cleanTrail, gaps, needsReplan, pace, projectToTrail, readiness, roleName, skillLevels, MAX_TRAILS, MAX_UNITS, cleanAvailability, type RoleResearch } from "@sdp/study";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { getDb } from "@sdp/db";
+import { getDb, studyResearch, studySchedules } from "@sdp/db";
 import { emitAsUser, getSession } from "@sdp/auth";
-import { loadCenter, loadResearch, practiced, saveCenter, scheduleChecks } from "@/lib/study";
+import { activeResearch, loadCenter, practiced, saveCenter, scheduleChecks } from "@/lib/study";
 
 /** A Central de estudos do perfil ativo: vaga, pesquisa, trilhas, cronograma e o quanto você está pronto. */
 export async function GET() {
@@ -16,10 +17,16 @@ export async function GET() {
   const p = s.profile;
   const today = dayInBrazil();
   const c = await loadCenter(db, p);
-  const r = await loadResearch(db, c.role, p.level);
+  const r = await activeResearch(db, p, c);
   const checks = await scheduleChecks(db, p.id, addDays(today, -60));
-  const data = r?.status === "done" ? (r.data as RoleResearch) : null;
+  const data: RoleResearch | null = r.data;
   const skills = data?.skills ?? [];
+  const versions = await db
+    .select({ id: studySchedules.id, createdAt: studySchedules.createdAt, researchId: studySchedules.researchId, schedule: studySchedules.schedule })
+    .from(studySchedules)
+    .where(eq(studySchedules.profileId, p.id))
+    .orderBy(desc(studySchedules.createdAt))
+    .limit(8);
   const levels = skillLevels(skills, c.skillStatus, practiced(c, checks));
   return NextResponse.json({
     db: true,
@@ -27,7 +34,20 @@ export async function GET() {
     title: trackTitle(p.stack, p.level as Level),
     today,
     center: c,
-    research: r ? { status: r.status, error: r.error, startedAt: r.startedAt, data } : null,
+    research: r.running || r.active || r.lastError ? { status: r.running ? "running" : data ? "done" : "error", error: r.lastError, startedAt: (r.running ?? r.active)?.startedAt ?? null, data, id: r.active?.id ?? null } : null,
+    history: r.rows.map((h) => ({
+      id: h.id,
+      role: h.role,
+      level: h.level,
+      status: h.status,
+      error: h.error,
+      startedAt: h.startedAt,
+      researchedAt: h.researchedAt,
+      postings: (h.data as RoleResearch | null)?.postingsAnalyzed ?? 0,
+      skills: (h.data as RoleResearch | null)?.skills.length ?? 0,
+    })),
+    pace: pace(c.trails, c.availability, today),
+    versions: versions.map((v) => ({ id: v.id, createdAt: v.createdAt, researchId: v.researchId, notes: (v.schedule as { notes?: string })?.notes ?? "", items: ((v.schedule as { items?: unknown[] })?.items ?? []).length })),
     levels,
     readiness: data ? readiness(skills, levels) : null,
     gaps: gaps(skills, levels),
@@ -36,7 +56,7 @@ export async function GET() {
   });
 }
 
-/** Muda uma parte da central: { op: "role" | "availability" | "skill" | "trail-add" | "trail-update" | "trail-remove" | "unit" | "unit-add" | "unit-remove" | "project-choose", ... }. */
+/** Muda uma parte da central: { op: "role" | "research-use" | "availability" | "skill" | "trail-add" | "trail-update" | "trail-remove" | "unit" | "unit-add" | "unit-remove" | "project-choose", ... }. */
 export async function PATCH(req: Request) {
   const db = getDb();
   const s = await getSession();
@@ -48,8 +68,22 @@ export async function PATCH(req: Request) {
 
   switch (b?.op) {
     case "role": {
+      // do montador (spec) ou escrito à mão (role)
+      if (b.spec !== undefined) {
+        const spec = cleanRoleSpec(b.spec);
+        if (!spec) return bad("Complete todos os passos do cargo.");
+        await saveCenter(db, p.id, { roleSpec: spec, targetRole: roleName(spec) });
+        break;
+      }
       const role = typeof b.role === "string" ? b.role.trim().slice(0, 100) : "";
-      await saveCenter(db, p.id, { targetRole: role || null });
+      await saveCenter(db, p.id, { targetRole: role || null, roleSpec: null });
+      break;
+    }
+    case "research-use": {
+      const id = typeof b.id === "string" ? b.id : "";
+      const [row] = /^[0-9a-f-]{36}$/.test(id) ? await db.select({ status: studyResearch.status }).from(studyResearch).where(and(eq(studyResearch.id, id), eq(studyResearch.profileId, p.id))) : [];
+      if (row?.status !== "done") return bad("Essa pesquisa não terminou.");
+      await saveCenter(db, p.id, { researchId: id });
       break;
     }
     case "availability":

@@ -4,7 +4,7 @@
  * Os prompts ficam aqui (iguais para o Claude Code da assinatura e para a API);
  * a limpeza do que a IA devolve fica no @sdp/study.
  */
-import { ITEM_KINDS, TRAIL_KINDS, WEEKDAYS, kindOf, plannable, weekday, type Availability, type Schedule, type Skill, type SkillLevel, type Trail } from "@sdp/study";
+import { ITEM_KINDS, TRAIL_KINDS, WEEKDAYS, hm, kindOf, plannable, weekday, type Availability, type Pace, type Schedule, type Skill, type SkillLevel, type Trail } from "@sdp/study";
 
 // ---------------------------------------------------------------------------
 // Pesquisa da vaga (skill fixa: sempre o mesmo método e o mesmo formato)
@@ -96,7 +96,7 @@ function contextText(c: StudyContext): string {
     ? c.trails
         .map((t) => {
           const pend = t.units.filter((u) => !u.done);
-          return `- [${t.id}] ${kindOf(t.kind).title}: ${t.title} · importância ${t.importance}/3 · ${t.perWeek}x por semana, sessões de ${t.sessionMin} min${t.deadline ? ` · prazo ${t.deadline}` : ""}${t.skills.length ? ` · cobre ${t.skills.join(", ")}` : ""}\n  Pendentes (${pend.length} de ${t.units.length}): ${pend.slice(0, 15).map((u) => `[${u.id}] ${u.title}`).join("; ") || "nenhuma"}`;
+          return `- [${t.id}] ${kindOf(t.kind).title}: ${t.title} · importância ${t.importance}/3${t.hours ? ` · ~${t.hours} h no total` : " · sem estimativa de horas"}${t.deadline ? ` · data fixa ${t.deadline}` : ""}${t.skills.length ? ` · cobre ${t.skills.join(", ")}` : ""}\n  Pendentes (${pend.length} de ${t.units.length}): ${pend.slice(0, 15).map((u) => `[${u.id}] ${u.title}`).join("; ") || "nenhuma"}`;
         })
         .join("\n")
     : "(nenhuma trilha ainda)";
@@ -125,9 +125,21 @@ export interface ChatMessage {
   text: string;
 }
 
+/** Um anexo que vai para a IA pela primeira vez (imagem ou PDF, em base64). */
+export interface ChatAttachment {
+  name: string;
+  mime: string;
+  data: string;
+}
+
 export interface StudyChatInput {
   context: StudyContext;
+  /** Resumo do começo da conversa (as mensagens antigas não vão inteiras). */
+  summary?: string;
+  /** As mensagens recentes. Anexos já lidos vão como texto dentro delas. */
   messages: ChatMessage[];
+  /** Anexos novos da última mensagem dele. */
+  attachments?: ChatAttachment[];
 }
 
 export interface StudyChatReply {
@@ -135,23 +147,31 @@ export interface StudyChatReply {
   /** add_trail = há uma trilha pronta para ele adicionar; replan = refazer o cronograma. */
   action: "none" | "add_trail" | "replan";
   /** A trilha proposta (vazia quando action não é add_trail). */
-  trail: { kind: string; title: string; why: string; importance: number; perWeek: number; sessionMin: number; deadline: string; skills: string[]; units: string[] };
+  trail: { kind: string; title: string; why: string; importance: number; hours: number; deadline: string; skills: string[]; units: string[] };
   /** Um combinado para o cronograma ("semana que vem tenho prova", "sábado não estudo"). */
   note: string;
+  /** Resumo atualizado da conversa inteira (vai no lugar das mensagens antigas na próxima vez). */
+  summary: string;
+  /** O que a IA leu de cada anexo novo (para não reenviar o arquivo depois). */
+  attachments: { name: string; text: string }[];
 }
 
 export const CHAT_SYSTEM_PROMPT = `Você é o coach de estudos dentro da plataforma de estudos do usuário. Conversa em português do Brasil, curto e direto (no máximo 5 frases por resposta), como um colega que entende de carreira em tecnologia.
 
 O que você faz:
-1. Ajuda a adicionar uma TRILHA: pós-graduação, certificação, livro, curso, projeto ou outro estudo. Para isso descubra, perguntando só o que falta:
+1. Monta o ESCOPO de uma TRILHA: pós-graduação, certificação, livro, curso, projeto ou outro estudo. A trilha diz O QUE precisa ser aprendido, não quando: o tempo (vezes por semana, minutos) quem decide é o cronograma, a partir do tempo livre dele. Não pergunte vezes por semana nem minutos por sessão. Descubra, perguntando só o que falta:
    - o que é (nome exato) e por que importa para a vaga dele;
-   - as unidades: matérias da pós, módulos ou domínios da certificação, capítulos do livro, aulas do curso, entregas do projeto. Se for algo público e conhecido (um livro famoso, uma certificação), proponha você mesmo a lista, usando a busca na web quando ajudar, e peça só a confirmação;
-   - prazo (se houver);
-   - quantas vezes por semana entra (não precisa ser todo dia: 1, 2 ou 3 vezes por semana costuma bastar) e de quantos minutos cada sessão. Sugira blocos curtos, de 15 a 30 minutos, para aproveitar tempos pequenos;
+   - o escopo completo, em unidades: matérias da pós, domínios e tópicos da certificação, capítulos do livro, aulas do curso, entregas do projeto. Pesquise na web (site oficial, guia do exame, sumário do livro, grade da pós) e proponha você mesmo a lista, pedindo só a confirmação. Se ele mandou print ou PDF (grade da pós, ementa), use o que está nele;
+   - "hours": estime as horas totais de estudo da trilha inteira (ex.: carga horária da pós, horas típicas de preparo para o exame, horas de leitura do livro) e diga a estimativa na resposta;
+   - data fixa, só se existir de verdade (data da prova, fim de uma matéria da pós). Não invente prazo;
    - importância para a vaga, de 1 a 3, sugerida por você com base nas habilidades que as vagas pedem.
    Quando tiver o suficiente, responda com action "add_trail", a trilha completa em "trail" e, em "reply", um resumo de uma ou duas frases dizendo que ele pode clicar em "Adicionar à central".
 2. Quando ele pedir para refazer o cronograma, ou contar algo que muda a semana (prova, viagem, um dia sem tempo), responda com action "replan", escreva o combinado em "note" (uma frase objetiva) e diga que vai refazer o cronograma.
 3. Fora isso, action "none": responda a dúvida, e sempre lembre o que é mais importante para a vaga quando fizer sentido.
+
+Anexos: quando ele mandar imagem ou PDF, leia com atenção e use na resposta. Em "attachments", devolva para CADA anexo novo { name, text } com tudo o que importa dele em texto (transcreva listas, matérias, datas, cargas horárias; até ~1500 caracteres). Sem anexo novo, lista vazia.
+
+Memória: em "summary", escreva o resumo atualizado da conversa inteira (o resumo anterior + o que aconteceu agora), em até 6 frases: o que ele contou, o que foi decidido e o que ficou pendente. Esse resumo substitui as mensagens antigas na próxima vez.
 
 Regras do JSON:
 - "trail" sempre presente; quando action não for "add_trail", use textos vazios, números 0 e listas vazias.
@@ -169,29 +189,34 @@ export const CHAT_SCHEMA = {
     trail: {
       type: "object",
       additionalProperties: false,
-      required: ["kind", "title", "why", "importance", "perWeek", "sessionMin", "deadline", "skills", "units"],
+      required: ["kind", "title", "why", "importance", "hours", "deadline", "skills", "units"],
       properties: {
         kind: { type: "string" },
         title: { type: "string" },
         why: { type: "string" },
         importance: { type: "integer" },
-        perWeek: { type: "integer" },
-        sessionMin: { type: "integer" },
+        hours: { type: "integer" },
         deadline: { type: "string" },
         skills: { type: "array", items: { type: "string" } },
         units: { type: "array", items: { type: "string" } },
       },
     },
     note: { type: "string" },
+    summary: { type: "string" },
+    attachments: {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["name", "text"], properties: { name: { type: "string" }, text: { type: "string" } } },
+    },
   },
 } as const;
 
 export function buildChatPrompt(i: StudyChatInput): string {
   const talk = i.messages
     .slice(-20)
-    .map((m) => `${m.role === "user" ? "Ele" : "Você"}: ${m.text.slice(0, 2000)}`)
+    .map((m) => `${m.role === "user" ? "Ele" : "Você"}: ${m.text.slice(0, 4000)}`)
     .join("\n\n");
-  return `${contextText(i.context)}\n\n## Conversa até agora\n${talk}\n\nResponda à última mensagem dele no formato JSON pedido.`;
+  const files = i.attachments?.length ? `\n\n## Anexos novos nesta mensagem\n${i.attachments.map((a) => `- ${a.name}`).join("\n")}` : "";
+  return `${contextText(i.context)}${i.summary ? `\n\n## Resumo do começo da conversa\n${i.summary}` : ""}\n\n## Conversa${i.summary ? " (mensagens recentes)" : " até agora"}\n${talk}${files}\n\nResponda à última mensagem dele no formato JSON pedido.`;
 }
 
 export function normalizeChat(raw: unknown): StudyChatReply {
@@ -206,13 +231,14 @@ export function normalizeChat(raw: unknown): StudyChatReply {
       title: String(t.title ?? ""),
       why: String(t.why ?? ""),
       importance: Number(t.importance) || 0,
-      perWeek: Number(t.perWeek) || 0,
-      sessionMin: Number(t.sessionMin) || 0,
+      hours: Number(t.hours) || 0,
       deadline: String(t.deadline ?? ""),
       skills: Array.isArray(t.skills) ? t.skills.map(String) : [],
       units: Array.isArray(t.units) ? t.units.map(String) : [],
     },
     note: String(r.note ?? "").slice(0, 300),
+    summary: String(r.summary ?? "").slice(0, 1500),
+    attachments: Array.isArray(r.attachments) ? r.attachments.map((a: any) => ({ name: String(a?.name ?? ""), text: String(a?.text ?? "").slice(0, 3000) })) : [],
   };
 }
 
@@ -266,10 +292,13 @@ export interface ScheduleInput {
   days: string[];
   /** Como foi o cronograma anterior: feitos, não feitos e o que ficou para trás. */
   previous?: { done: number; total: number; missed: string[]; recent: string[] };
+  /** O ritmo: seu tempo x o ideal para a data alvo. */
+  pace?: Pace;
 }
 
 export interface ScheduleDraft {
   notes: string;
+  tips: string[];
   outline: { week: string; focus: string }[];
   items: { day: string; title: string; kind: string; minutes: number; trailId: string; unitId: string; skill: string; why: string }[];
 }
@@ -278,8 +307,8 @@ export const SCHEDULE_SYSTEM_PROMPT = `Você monta o cronograma de estudos de um
 
 Regras do cronograma:
 - Nunca passe dos minutos livres de cada dia (já com a folga). Dia com 0 minutos fica sem nada: é descanso.
-- Blocos curtos: a maioria de 10 a 30 minutos, para caber nos tempos pequenos do dia. Um dia pode ter vários blocos. Respeite os minutos de sessão de cada trilha.
-- Cada trilha entra só as vezes por semana combinadas (1, 2 ou 3 vezes por semana não é todo dia). Espalhe pela semana.
+- Blocos curtos: a maioria de 10 a 30 minutos, para caber nos tempos pequenos do dia. Um dia pode ter vários blocos.
+- VOCÊ decide o ritmo de cada trilha (as trilhas só dizem o escopo e as horas estimadas): quantas vezes por semana entra e o tamanho dos blocos, pela importância, pelas horas que faltam e pela data fixa. Não precisa ser todo dia; espalhe pela semana e alterne temas.
 - Siga as unidades das trilhas em ordem. Quando o item for de uma trilha, preencha "trailId" e "unitId" com os ids dados (entre colchetes). Senão, "".
 - Prioridade: prazo próximo, importância da trilha, e habilidades muito pedidas nas vagas que ele não domina (cruze com o que faltou nas entrevistas).
 - Revisão espaçada, sempre: depois de estudar um tema importante, ponha uma "revisao" curta (10 a 15 min) 1 a 3 dias depois e outra cerca de uma semana depois. Revisão é se testar (explicar em voz alta, responder perguntas, refazer um exercício), não reler.
@@ -291,14 +320,16 @@ Regras do cronograma:
 - "why": meia frase do porquê agora.
 - "outline": uma linha por semana depois do período detalhado, até a data alvo (no máximo 12 semanas), com o foco da semana.
 - "notes": 2 a 4 frases para ele: a lógica da quinzena e o que é mais importante não pular.
+- "tips": de 2 a 4 dicas práticas e específicas para ele chegar mais perto do ritmo ideal (veja "Ritmo"), sem mudar o tempo que ele deu: aproveitar tempos curtos (revisão de 10 min no celular, no transporte), juntar revisão com treino de entrevista, adiar trilhas de importância 1, ou rever a data alvo. Se o ritmo já dá conta, dicas para manter a constância.
 - kind: um de ${ITEM_KINDS.map((k) => k.id).join(", ")}.`;
 
 export const SCHEDULE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["notes", "outline", "items"],
+  required: ["notes", "tips", "outline", "items"],
   properties: {
     notes: { type: "string" },
+    tips: { type: "array", items: { type: "string" } },
     outline: {
       type: "array",
       items: { type: "object", additionalProperties: false, required: ["week", "focus"], properties: { week: { type: "string" }, focus: { type: "string" } } },
@@ -329,13 +360,18 @@ export function buildSchedulePrompt(i: ScheduleInput): string {
   const prev = i.previous
     ? `## Cronograma anterior\nFeitos ${i.previous.done} de ${i.previous.total} itens.${i.previous.missed.length ? `\nFicaram para trás: ${i.previous.missed.slice(0, 15).join("; ")}` : ""}${i.previous.recent.length ? `\nEstudados nos últimos dias (para a revisão espaçada): ${i.previous.recent.slice(0, 20).join("; ")}` : ""}`
     : "";
-  return [contextText(i.context), prev, `## Período a detalhar (minutos que pode usar em cada dia)\n${days}`, "Monte o cronograma no formato JSON pedido."].filter(Boolean).join("\n\n");
+  const p = i.pace;
+  const pace = p
+    ? `## Ritmo\nFaltam ~${p.remainingHours} h nas trilhas com estimativa${p.unknown.length ? ` (sem estimativa: ${p.unknown.join(", ")})` : ""}. Ele tem ${hm(p.weeklyMin)} por semana para estudar.${p.finishDate ? ` Nesse ritmo termina por volta de ${p.finishDate}.` : ""}${p.idealWeeklyMin ? ` Para chegar na data alvo (${p.targetDate}), o ideal seria ${hm(p.idealWeeklyMin)} por semana.` : ""}`
+    : "";
+  return [contextText(i.context), prev, pace, `## Período a detalhar (minutos que pode usar em cada dia)\n${days}`, "Monte o cronograma no formato JSON pedido."].filter(Boolean).join("\n\n");
 }
 
 export function normalizeSchedule(raw: unknown): ScheduleDraft {
   const r = (raw ?? {}) as Record<string, any>;
   return {
     notes: String(r.notes ?? ""),
+    tips: Array.isArray(r.tips) ? r.tips.map(String).filter(Boolean).slice(0, 5) : [],
     outline: Array.isArray(r.outline) ? r.outline.map((w: any) => ({ week: String(w?.week ?? ""), focus: String(w?.focus ?? "") })) : [],
     items: Array.isArray(r.items) ? r.items : [],
   };
