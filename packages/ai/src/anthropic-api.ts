@@ -5,6 +5,7 @@ import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEv
 import { SESSION_SCHEMA, SESSION_SYSTEM_PROMPT, buildSessionPrompt, normalizeSession, type SessionFeedback, type SessionInput } from "./session";
 import type { AiProvider, Evaluation, EvaluationInput } from "./types";
 import { attachmentBlock } from "./claude-code";
+import { PAIR_SCHEMA, buildPairPrompt, normalizePair, pairSystemPrompt, type PairChatInput, type PairChatReply } from "./pair";
 
 /**
  * Usa a API da Anthropic (chave em ANTHROPIC_API_KEY). Necessário se o app for
@@ -49,6 +50,12 @@ export class AnthropicApiProvider implements AiProvider {
 
   async planSchedule(input: ScheduleInput): Promise<ScheduleDraft> {
     return normalizeSchedule(await this.json(SCHEDULE_SYSTEM_PROMPT, SCHEDULE_SCHEMA, buildSchedulePrompt(input), { timeoutMs: 6 * 60_000 }));
+  }
+
+  /** Pela API não há acesso à pasta do computador: o mentor pede a saída dos comandos. */
+  async pairChat(input: PairChatInput): Promise<PairChatReply> {
+    const setup = { ...input.setup, folder: undefined };
+    return normalizePair(await this.json(pairSystemPrompt(input.persona), PAIR_SCHEMA, buildPairPrompt({ ...input, setup }), { web: true, timeoutMs: 6 * 60_000 }), input);
   }
 
   private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number; attachments?: ChatAttachment[] } = {}): Promise<unknown> {

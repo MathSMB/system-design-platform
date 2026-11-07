@@ -4,6 +4,8 @@ import { ANSWER_SCHEMA, ANSWER_SYSTEM_PROMPT, buildAnswerPrompt, normalizeAnswer
 import { EVALUATION_SCHEMA, SYSTEM_PROMPT, buildPrompt, extractJson, normalizeEvaluation } from "./rubric";
 import { SESSION_SCHEMA, SESSION_SYSTEM_PROMPT, buildSessionPrompt, normalizeSession, type SessionFeedback, type SessionInput } from "./session";
 import type { AiProvider, Evaluation, EvaluationInput } from "./types";
+import { existsSync, statSync } from "node:fs";
+import { PAIR_SCHEMA, buildPairPrompt, normalizePair, pairSystemPrompt, type PairChatInput, type PairChatReply } from "./pair";
 
 export interface ClaudeCodeOptions {
   /** Caminho do executável. Padrão: "claude" (ou a variável CLAUDE_BIN). */
@@ -59,12 +61,29 @@ export class ClaudeCodeProvider implements AiProvider {
   }
 
   /**
+   * Com a pasta do projeto, o mentor pode ler os arquivos e rodar só comandos de leitura do Git
+   * (status, log, diff, branch) para conferir o que a pessoa fez. Nada de escrever ou apagar.
+   */
+  async pairChat(input: PairChatInput): Promise<PairChatReply> {
+    const folder = input.setup.folder && isDir(input.setup.folder) ? input.setup.folder : undefined;
+    const setup = { ...input.setup, folder };
+    const raw = await this.json(pairSystemPrompt(input.persona), PAIR_SCHEMA, buildPairPrompt({ ...input, setup }), {
+      web: true,
+      timeoutMs: 6 * 60_000,
+      ...(folder ? { readDir: folder } : {}),
+    });
+    return normalizePair(raw, input);
+  }
+
+  /**
    * Roda `claude -p` com saída JSON validada pelo schema. Com web, libera só a busca e a leitura de páginas.
    * Com anexos, a mensagem vai em stream-json com os blocos de imagem/PDF em base64: a IA vê o arquivo
    * sem ganhar acesso a nenhuma pasta do computador.
    */
-  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number; attachments?: ChatAttachment[] } = {}): Promise<unknown> {
+  private async json(system: string, schema: object, prompt: string, o: { web?: boolean; timeoutMs?: number; attachments?: ChatAttachment[]; readDir?: string } = {}): Promise<unknown> {
     const files = o.attachments?.length ? o.attachments : null;
+    const tools = [...(o.readDir ? READ_TOOLS : []), ...(o.web ? WEB_TOOLS : [])];
+    const allowed = [...(o.readDir ? [...READ_TOOLS.filter((t) => t !== "Bash"), ...GIT_READ] : []), ...(o.web ? WEB_TOOLS : [])];
     const args = [
       ...(this.opts.binArgs ?? []),
       "-p",
@@ -73,16 +92,30 @@ export class ClaudeCodeProvider implements AiProvider {
       JSON.stringify(schema),
       "--system-prompt",
       system,
-      ...(o.web ? ["--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch"] : ["--tools", ""]),
+      ...(tools.length ? ["--tools", tools.join(","), "--allowedTools", allowed.join(",")] : ["--tools", ""]),
+      ...(o.readDir ? ["--add-dir", o.readDir] : []),
       "--no-session-persistence",
     ];
     if (this.opts.model) args.push("--model", this.opts.model);
 
     const stdin = files ? `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }, ...files.map(attachmentBlock)] } })}\n` : prompt;
-    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, stdin, Math.max(this.opts.timeoutMs ?? 180_000, o.timeoutMs ?? 0));
+    const stdout = await run(this.opts.bin ?? process.env.CLAUDE_BIN ?? "claude", args, stdin, Math.max(this.opts.timeoutMs ?? 180_000, o.timeoutMs ?? 0), o.readDir);
     return parseClaudeJson(files ? lastResult(stdout) : stdout);
   }
 }
+
+const WEB_TOOLS = ["WebSearch", "WebFetch"];
+/** Ler a pasta do projeto (o Bash fica preso aos comandos de leitura do Git logo abaixo). */
+const READ_TOOLS = ["Read", "Glob", "Grep", "Bash"];
+const GIT_READ = ["Bash(git status:*)", "Bash(git log:*)", "Bash(git diff:*)", "Bash(git branch:*)", "Bash(git remote -v)"];
+
+const isDir = (p: string) => {
+  try {
+    return existsSync(p) && statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
 
 /** Bloco de conteúdo da mensagem (formato da API) para uma imagem ou um PDF. */
 export function attachmentBlock(a: ChatAttachment) {
@@ -117,13 +150,13 @@ export function parseClaudeJson(stdout: string): unknown {
   return extractJson(String(envelope.result ?? ""));
 }
 
-function run(bin: string, args: string[], stdin: string, timeoutMs: number): Promise<string> {
+function run(bin: string, args: string[], stdin: string, timeoutMs: number, cwd?: string): Promise<string> {
   // Sem ANTHROPIC_API_KEY no ambiente, o Claude Code usa o login da assinatura.
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
 
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(bin, args, { env, cwd, stdio: ["pipe", "pipe", "pipe"] });
     let out = "";
     let err = "";
     const timer = setTimeout(() => {

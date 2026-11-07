@@ -7,6 +7,7 @@ export { ClaudeCodeProvider, parseClaudeOutput, parseClaudeJson } from "./claude
 export * from "./answer";
 export * from "./session";
 export * from "./study";
+export * from "./pair";
 export { AnthropicApiProvider } from "./anthropic-api";
 export { buildPrompt, normalizeEvaluation, EVALUATION_SCHEMA, SYSTEM_PROMPT, DIMENSIONS } from "./rubric";
 

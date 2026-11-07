@@ -282,7 +282,7 @@ export const events = pgTable(
     id: bigserial("id", { mode: "number" }).primaryKey(),
     /** Ex. "resposta.avaliada", "etapa.concluida", "processo.concluido", "design.avaliado". */
     type: text("type").notNull(),
-    /** App que gravou: "system-design", "entrevista", "estudos", "habito", "painel". */
+    /** App que gravou: "system-design", "entrevista", "estudos", "habito", "pair", "painel". */
     source: text("source").notNull(),
     userId: uuid("user_id"),
     profileId: uuid("profile_id"),
@@ -317,3 +317,53 @@ export const githubTokens = pgTable("github_tokens", {
   expiresAt: text("expires_at"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Uma conversa do Pair Programming. Toda resposta vem da IA; aqui fica só a conversa,
+ * para retomar o contexto depois (a IA recebe o resumo + as últimas mensagens).
+ */
+export const pairChats = pgTable(
+  "pair_chats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: uuid("profile_id").notNull(),
+    /** O que ele quer construir, para achar a conversa na lista. */
+    title: text("title").notNull().default(""),
+    /** Dia em Brasília (AAAA-MM-DD) em que a conversa começou: a lista agrupa por ele. */
+    day: text("day").notNull(),
+    /** Resumo da conversa, atualizado pela IA a cada resposta: vai no lugar das mensagens antigas. */
+    summary: text("summary").notNull().default(""),
+    /**
+     * Do que se trata: { goal, stack, trailId?, folder? }. trailId liga a uma trilha dos Estudos
+     * (opcional); folder é a pasta do projeto no computador, que a IA pode ler para conferir.
+     */
+    setup: jsonb("setup").notNull().default({}),
+    /** O roteiro que a IA montou ([títulos]) e o passo atual (0 = o primeiro). */
+    plan: jsonb("plan").notNull().default([]),
+    step: bigint("step", { mode: "number" }).notNull().default(0),
+    /** A IA está respondendo desde (a tela espera, mesmo se a janela fechou). */
+    pendingSince: timestamp("pending_since", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pair_chats_profile").on(t.profileId, t.updatedAt)],
+);
+
+/** Cada mensagem de uma conversa do Pair Programming. */
+export const pairMessages = pgTable(
+  "pair_messages",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    chatId: uuid("chat_id").notNull(),
+    /** "user" | "assistant" */
+    role: text("role").notNull(),
+    text: text("text").notNull(),
+    /** O que veio junto da resposta: { step, waiting, checked }. */
+    data: jsonb("data").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("pair_messages_chat").on(t.chatId, t.id)],
+);
+
+export type PairChat = typeof pairChats.$inferSelect;
+export type PairMessage = typeof pairMessages.$inferSelect;

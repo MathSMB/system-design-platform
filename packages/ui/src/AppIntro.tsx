@@ -11,6 +11,7 @@ const TONE = {
   "accent-2": { text: "text-accent-2", bg: "bg-accent-2", border: "border-accent-2/50", hover: "hover:border-accent-2", glow: "shadow-[0_0_24px_rgba(255,60,172,0.18)]" },
   bad: { text: "text-bad", bg: "bg-bad", border: "border-bad/50", hover: "hover:border-bad", glow: "shadow-[0_0_24px_rgba(255,154,60,0.2)]" },
   ok: { text: "text-ok", bg: "bg-ok", border: "border-ok/50", hover: "hover:border-ok", glow: "shadow-[0_0_24px_rgba(57,255,143,0.18)]" },
+  warn: { text: "text-warn", bg: "bg-warn", border: "border-warn/50", hover: "hover:border-warn", glow: "shadow-[0_0_24px_rgba(255,225,77,0.18)]" },
 } as const;
 export type IntroTone = keyof typeof TONE;
 

@@ -8,6 +8,7 @@ Esta pasta descreve as quatro features da plataforma com detalhe suficiente para
 | 2 | Simulador de processo seletivo e entrevista por stack (área → stack → senioridade → empresa, do RH à contratação) | [02-processo-seletivo.md](02-processo-seletivo.md) | `main` (PRs #1 a #5) |
 | 3 | Central de estudos (`/estudos`) | [03-central-de-estudos.md](03-central-de-estudos.md) | só no PR #6 |
 | 4 | Hábito com a placa-mãe neon (`/habito`, `/conta`) | [04-habito-placa-mae.md](04-habito-placa-mae.md) | só no PR #6 |
+| 5 | Pair Programming: mentor passo a passo | [05-pair-programming.md](05-pair-programming.md) | `apps/pair` |
 
 Depois da separação em apps, o código de cada feature fica em `apps/system-design` (1), `apps/entrevista` (2), `apps/estudos` (3) e `apps/habito` + `apps/painel` (4); o que é comum fica em `packages/` (tema e cabeçalho em `packages/ui`, banco em `packages/db`, login em `packages/auth`, eventos em `packages/events`).
 
@@ -46,7 +47,7 @@ As quatro features usam o mesmo tema. Quem for replicar qualquer uma delas preci
 | `--down` | `#ff4d6d` | vermelho: erro, fora do ar |
 | `--ink` | `#9fb4ff` | azul claro auxiliar |
 
-Cada área da plataforma tem uma cor-assinatura: **Estudo = ciano**, **Entrevista técnica = magenta**, **Processo seletivo = laranja (`bad`)**, **Central de estudos = magenta**, **Hábito = verde**. O rótulo do topo da página, o destaque do título e o brilho do hover dos cards seguem essa cor.
+Cada área da plataforma tem uma cor-assinatura: **Estudo = ciano**, **Entrevista técnica = magenta**, **Processo seletivo = laranja (`bad`)**, **Central de estudos = magenta**, **Hábito = verde**, **Pair Programming = amarelo (`warn`)**. O rótulo do topo da página, o destaque do título e o brilho do hover dos cards seguem essa cor.
 
 ### Fundo e textura
 

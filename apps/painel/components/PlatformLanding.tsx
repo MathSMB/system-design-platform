@@ -1,7 +1,7 @@
 "use client";
 
 import { LBlock, LHeading, LIconItem, appUrl, type AppId } from "@sdp/ui";
-import { ArrowDown, ArrowRight, Briefcase, Compass, Cpu, KeyRound, LogIn, Network, Repeat, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowRight, Briefcase, Compass, Cpu, KeyRound, LogIn, Network, Repeat, ShieldCheck, Sparkles, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 
 /** Classes fixas por cor (o Tailwind só gera classes que aparecem inteiras no código). */
@@ -10,6 +10,7 @@ const TONE = {
   bad: { text: "text-bad", border: "hover:border-bad", glow: "rgba(255,154,60,0.35)" },
   "accent-2": { text: "text-accent-2", border: "hover:border-accent-2", glow: "rgba(255,60,172,0.35)" },
   ok: { text: "text-ok", border: "hover:border-ok", glow: "rgba(57,255,143,0.35)" },
+  warn: { text: "text-warn", border: "hover:border-warn", glow: "rgba(255,225,77,0.35)" },
 } as const;
 
 const APPS: { id: AppId; name: string; Icon: LucideIcon; tone: keyof typeof TONE; role: string; pitch: string; bullets: string[] }[] = [
@@ -41,6 +42,15 @@ const APPS: { id: AppId; name: string; Icon: LucideIcon; tone: keyof typeof TONE
     bullets: ["7 etapas e imprevistos", "Responda falando, com relógio", "Nível, nota e o que faltou"],
   },
   {
+    id: "pair",
+    name: "Pair Programming",
+    Icon: Users,
+    tone: "warn",
+    role: "Construir com ajuda",
+    pitch: "Um mentor de IA programa do seu lado, como um sênior com um júnior: ambiente, Git e código linha por linha, um passo de cada vez.",
+    bullets: ["Só segue no \"pode continuar\"", "Clique numa linha e entenda", "Ligado aos projetos dos Estudos"],
+  },
+  {
     id: "habito",
     name: "Hábito",
     Icon: Cpu,
@@ -55,6 +65,7 @@ const FLOW = [
   { tone: "accent-2", app: "Estudos", text: "descobre o que a vaga pede e o que falta em você" },
   { tone: "accent", app: "System Design", text: "aprende arquitetura quebrando e consertando sistemas" },
   { tone: "bad", app: "Entrevista", text: "treina o processo seletivo e recebe nota em cada resposta" },
+  { tone: "warn", app: "Pair Programming", text: "constrói o projeto de portfólio com um mentor do lado, passo a passo" },
   { tone: "ok", app: "Hábito", text: "tudo isso marca a meta do dia, sem você anotar nada" },
 ] as const;
 
@@ -66,7 +77,7 @@ function Cta({ label = "Criar conta ou entrar" }: { label?: string }) {
   );
 }
 
-/** A página da plataforma inteira (o logo leva para cá): os quatro apps e como se completam. */
+/** A página da plataforma inteira (o logo leva para cá): os cinco apps e como se completam. */
 export function PlatformLanding() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
@@ -79,7 +90,7 @@ export function PlatformLanding() {
               Da vaga que você quer <span className="text-accent glow">à proposta na mão.</span>
             </h1>
             <p className="text-lg text-muted">
-              Quatro apps que trabalham juntos: um diz o que estudar, outro ensina na prática, outro treina a entrevista e o último garante que você não pare. Uma conta só para todos.
+              Cinco apps que trabalham juntos: um diz o que estudar, outro ensina na prática, outro treina a entrevista, outro programa o projeto com você e o último garante que você não pare. Uma conta só para todos.
             </p>
             <div className="flex flex-wrap items-center gap-4">
               <Cta />
@@ -88,9 +99,9 @@ export function PlatformLanding() {
               </a>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {APPS.map((a) => (
-              <a key={a.id} href={appUrl(a.id)} className={`group relative overflow-hidden rounded-lg border border-border transition-colors ${TONE[a.tone].border}`}>
+          <div className="grid grid-cols-6 gap-3">
+            {APPS.map((a, i) => (
+              <a key={a.id} href={appUrl(a.id)} className={`group relative overflow-hidden rounded-lg border border-border transition-colors ${i < 2 ? "col-span-3" : "col-span-2"} ${TONE[a.tone].border}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/demo/apps/${a.id}.jpg`} alt={`O app ${a.name}`} className="aspect-[16/10] w-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
                 <span className={`absolute bottom-0 left-0 right-0 flex items-center gap-1.5 bg-bg/85 px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ${TONE[a.tone].text}`}>
@@ -101,13 +112,13 @@ export function PlatformLanding() {
           </div>
         </div>
 
-        {/* os quatro apps */}
+        {/* os cinco apps */}
         <div id="apps" className="scroll-mt-20">
           <LBlock>
-            <LHeading center kicker="Os quatro apps" title="Cada um faz uma parte da sua preparação" sub="Clique em qualquer um para ver a apresentação completa dele." />
+            <LHeading center kicker="Os cinco apps" title="Cada um faz uma parte da sua preparação" sub="Clique em qualquer um para ver a apresentação completa dele." />
             <div className="mt-10 grid gap-4 md:grid-cols-2">
-              {APPS.map((a) => (
-                <a key={a.id} href={appUrl(a.id)} className={`group flex flex-col gap-4 rounded-xl border border-border bg-bg/40 p-6 transition-all ${TONE[a.tone].border}`}>
+              {APPS.map((a, i) => (
+                <a key={a.id} href={appUrl(a.id)} className={`group flex flex-col gap-4 rounded-xl border border-border bg-bg/40 p-6 transition-all ${i === APPS.length - 1 && APPS.length % 2 ? "md:col-span-2" : ""} ${TONE[a.tone].border}`}>
                   <div className="flex items-center gap-4">
                     <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-current ${TONE[a.tone].text}`} style={{ boxShadow: `0 0 22px ${TONE[a.tone].glow}` }}>
                       <a.Icon size={28} />
@@ -136,7 +147,7 @@ export function PlatformLanding() {
 
         {/* como se completam */}
         <LBlock>
-          <LHeading center kicker="Juntos" title="Como os quatro viram uma preparação completa" sub="Cada app alimenta o próximo, e o que você erra volta como prioridade." />
+          <LHeading center kicker="Juntos" title="Como os cinco viram uma preparação completa" sub="Cada app alimenta o próximo, e o que você erra volta como prioridade." />
           <ol className="mx-auto mt-10 flex max-w-2xl flex-col items-stretch">
             {FLOW.map((f, i) => (
               <li key={f.app} className="flex flex-col items-center">
@@ -160,9 +171,9 @@ export function PlatformLanding() {
 
         {/* uma conta */}
         <LBlock>
-          <LHeading center kicker="Uma conta" title="Entre uma vez, use os quatro" />
+          <LHeading center kicker="Uma conta" title="Entre uma vez, use os cinco" />
           <ul className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-3">
-            <LIconItem Icon={KeyRound} title="Login único" body="Entre com GitHub, Google ou e-mail e já está dentro dos quatro apps." />
+            <LIconItem Icon={KeyRound} title="Login único" body="Entre com GitHub, Google ou e-mail e já está dentro dos cinco apps." />
             <LIconItem Icon={Sparkles} title="Um painel com tudo" body="A meta do dia, os seus perfis e o que aconteceu em cada app." />
             <LIconItem Icon={ShieldCheck} title="No seu computador" body="Roda localmente, com a IA do seu Claude Code. Seus dados ficam com você." />
           </ul>
