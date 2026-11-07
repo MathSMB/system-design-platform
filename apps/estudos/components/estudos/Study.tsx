@@ -4,6 +4,7 @@ import { planOf } from "@sdp/habit";
 import {
   ITEM_KINDS,
   SKILL_LEVELS,
+  hm,
   TRAIL_KINDS,
   WEEKDAYS,
   itemKey,
@@ -12,25 +13,31 @@ import {
   researchStale,
   trailProgress,
   type Availability,
+  type Pace,
   type ProjectOption,
   type RoleResearch,
+  type RoleSpec,
   type Schedule,
   type ScheduleItem,
   type Skill,
   type SkillLevel,
   type Trail,
 } from "@sdp/study";
-import { BookOpen, CalendarDays, Compass, FolderGit2, Loader2, MessageCircle, Plus, RefreshCw, Search, Target, Trash2 } from "lucide-react";
+import { BookOpen, CalendarDays, Check, Compass, FolderGit2, History, Lightbulb, Loader2, MessageCircle, Plus, RefreshCw, Search, Target, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { type SessionData, appUrl } from "@sdp/ui";
 import { GithubLink } from "./GithubLink";
+import { RoleBuilder } from "./RoleBuilder";
 import { StudyChat } from "./StudyChat";
 import { StudyIntro } from "./Intro";
 
 export interface CenterData {
   role: string;
   customRole: boolean;
+  roleSpec: RoleSpec | null;
+  level: string;
+  researchId: string | null;
   availability: Availability;
   trails: Trail[];
   projectOptions: ProjectOption[];
@@ -43,12 +50,27 @@ interface Data {
   title?: string;
   today?: string;
   center?: CenterData | null;
-  research?: { status: "running" | "done" | "error"; error: string | null; startedAt: string; data: RoleResearch | null } | null;
+  research?: { status: "running" | "done" | "error"; error: string | null; startedAt: string | null; data: RoleResearch | null; id: string | null } | null;
+  history?: HistoryRow[];
+  pace?: Pace;
+  versions?: { id: number; createdAt: string; researchId: string | null; notes: string; items: number }[];
   levels?: Record<string, SkillLevel>;
   readiness?: number | null;
   gaps?: Skill[];
   checks?: Record<string, string[]>;
   needsReplan?: boolean;
+}
+
+interface HistoryRow {
+  id: string;
+  role: string;
+  level: string;
+  status: "running" | "done" | "error";
+  error: string | null;
+  startedAt: string;
+  researchedAt: string | null;
+  postings: number;
+  skills: number;
 }
 
 export const json = (method: string, body: unknown) => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -203,55 +225,141 @@ function Hero({ data, c, onChat }: { data: Data; c: CenterData; onChat(): void }
 // ---------------------------------------------------------------------------
 
 function Role({ data, c, patch, load }: { data: Data; c: CenterData; patch(b: unknown): Promise<unknown>; load(): void }) {
-  const [role, setRole] = useState(c.role);
   const [err, setErr] = useState("");
-  useEffect(() => setRole(c.role), [c.role]);
+  const [saving, setSaving] = useState(false);
+  const [viewing, setViewing] = useState<{ id: string; data: RoleResearch } | null>(null);
   const r = data.research;
   const res = r?.data;
   const running = r?.status === "running";
   const stale = res && researchStale(res.researchedAt, data.today!);
+  const history = data.history ?? [];
+  // já existe uma pesquisa pronta deste cargo, recente: dá para reaproveitar em vez de gastar outra
+  const reusable = history.find((h) => h.status === "done" && h.role === c.role && h.level === c.level && h.researchedAt && !researchStale(h.researchedAt, data.today!));
 
+  async function save(b: unknown) {
+    setSaving(true);
+    setErr("");
+    const out = (await patch({ op: "role", ...(b as object) })) as { ok: boolean; body: any };
+    if (!out.ok) setErr(out.body?.error ?? "Não deu para salvar o cargo.");
+    setSaving(false);
+  }
   async function start() {
+    if (reusable && !confirm(`Você já tem uma pesquisa deste cargo de ${br(reusable.researchedAt!)}. Fazer outra mesmo assim? (leva de 3 a 10 minutos da sua assinatura)`)) return;
     setErr("");
     const out = await call("/api/estudos/pesquisa", { method: "POST" });
     if (!out.ok) setErr(out.body.error ?? "Não deu para começar.");
     load();
   }
+  async function view(id: string) {
+    if (id === r?.id) return setViewing(null);
+    const out = await call(`/api/estudos/pesquisa?id=${id}`);
+    if (out.ok && out.body.research?.data) setViewing({ id, data: out.body.research.data });
+  }
+  async function use(id: string) {
+    await patch({ op: "research-use", id });
+    setViewing(null);
+  }
+  const shown = viewing?.data ?? res;
 
   return (
     <Section id="vaga" icon={<Target size={18} className="text-accent-2" />} title="A vaga que você busca">
       <div className="panel flex flex-col gap-3 p-4 text-sm">
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex min-w-64 flex-1 flex-col gap-1">
-            <span className="text-[12px] text-muted">Cargo (como aparece nos anúncios)</span>
-            <input value={role} maxLength={100} onChange={(e) => setRole(e.target.value)} placeholder="ex. Desenvolvedor Java Pleno" />
-          </label>
-          {role.trim() !== c.role && (
-            <button onClick={() => patch({ op: "role", role })} className="btn-ghost px-3 py-2 text-xs">
-              Salvar cargo
-            </button>
-          )}
-          <button disabled={running || role.trim() !== c.role} onClick={start} className="btn-neon flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40">
+        <RoleBuilder spec={c.roleSpec} role={c.role} custom={c.customRole} busy={saving} onSpec={(spec) => save({ spec })} onText={(role) => save({ role })} />
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+          <button disabled={running || saving} onClick={start} className="btn-neon flex items-center gap-2 px-4 py-2 text-xs disabled:opacity-40">
             {running ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-            {running ? "Pesquisando…" : res ? "Pesquisar de novo" : "Pesquisar as vagas"}
+            {running ? "Pesquisando…" : res ? "Fazer uma pesquisa nova" : "Pesquisar as vagas"}
           </button>
+          <span className="text-[12px] text-muted">
+            para <span className="text-text">{c.role}</span>
+          </span>
         </div>
         {running && (
           <p className="text-[12px] text-muted">
-            A IA está lendo anúncios reais na web (LinkedIn, Gupy, Glassdoor…). Leva de 3 a 10 minutos e usa o limite da sua assinatura. Pode sair da página: a pesquisa continua e fica salva.
+            A IA está lendo anúncios reais na web (LinkedIn, Gupy, Glassdoor…). Leva de 3 a 10 minutos e usa o limite da sua assinatura. Pode sair da página: a pesquisa continua e entra no histórico.
           </p>
         )}
-        {!running && !res && !r?.error && <p className="text-[12px] text-muted">Ainda sem pesquisa para este cargo. Ela fica salva e vale por 6 meses.</p>}
-        {r?.status === "error" && <p className="text-[12px] text-down">A última pesquisa falhou: {r.error}</p>}
+        {!running && !res && !r?.error && <p className="text-[12px] text-muted">Ainda sem pesquisa. Cada pesquisa fica salva no histórico, com a data, e vale por 6 meses.</p>}
+        {r?.error && !running && <p className="text-[12px] text-down">A última pesquisa falhou: {r.error}</p>}
         {err && <p className="text-[12px] text-down">{err}</p>}
         {stale && !running && <p className="text-[12px] text-warn">Esta pesquisa tem mais de 6 meses. Vale pesquisar de novo.</p>}
+        {res && res.role !== c.role && !running && (
+          <p className="text-[12px] text-warn">
+            A pesquisa em uso é de &quot;{res.role}&quot;. Faça uma pesquisa nova para &quot;{c.role}&quot; ou escolha outra no histórico.
+          </p>
+        )}
+        {history.length > 0 && <ResearchHistory rows={history} activeId={r?.id ?? null} viewingId={viewing?.id ?? null} onView={view} onUse={use} />}
       </div>
-      {res && <ResearchView res={res} levels={data.levels ?? {}} status={c.skillStatus} patch={patch} />}
+      {viewing && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-warn/50 px-3 py-2 text-[13px] text-warn">
+          Vendo a pesquisa de {br(viewing.data.researchedAt)}/{viewing.data.researchedAt.slice(0, 4)} ({viewing.data.role}). O cronograma usa outra.
+          <button onClick={() => use(viewing.id)} className="btn-ghost px-3 py-1 text-xs">
+            Usar esta no cronograma
+          </button>
+          <button onClick={() => setViewing(null)} className="text-[12px] text-muted underline">
+            voltar para a em uso
+          </button>
+        </div>
+      )}
+      {shown && <ResearchView res={shown} levels={viewing ? viewing.data.skills.reduce((a, s) => ({ ...a, [s.name]: c.skillStatus[s.name] ?? 0 }), {} as Record<string, SkillLevel>) : (data.levels ?? {})} patch={patch} />}
     </Section>
   );
 }
 
-function ResearchView({ res, levels, status, patch }: { res: RoleResearch; levels: Record<string, SkillLevel>; status: Record<string, SkillLevel>; patch(b: unknown): Promise<unknown> }) {
+/** O histórico de pesquisas, por dia: abrir uma antiga e escolher qual o cronograma usa. */
+function ResearchHistory({ rows, activeId, viewingId, onView, onUse }: { rows: HistoryRow[]; activeId: string | null; viewingId: string | null; onView(id: string): void; onUse(id: string): void }) {
+  const byDay = new Map<string, HistoryRow[]>();
+  for (const h of rows) {
+    const d = h.researchedAt ?? new Date(h.startedAt).toISOString().slice(0, 10);
+    byDay.set(d, [...(byDay.get(d) ?? []), h]);
+  }
+  return (
+    <details className="border-t border-border pt-3" open={rows.length > 1}>
+      <summary className="flex cursor-pointer items-center gap-1.5 hud-label">
+        <History size={12} /> Histórico de pesquisas ({rows.length})
+      </summary>
+      <div className="mt-2 flex flex-col gap-2">
+        {[...byDay].map(([day, list]) => (
+          <div key={day}>
+            <div className="font-mono text-[11px] text-muted">
+              {br(day)}/{day.slice(0, 4)}
+            </div>
+            <ul className="mt-1 flex flex-col gap-1">
+              {list.map((h) => (
+                <li key={h.id} className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] ${h.id === activeId ? "border-ok/60" : h.id === viewingId ? "border-warn/60" : "border-border"}`}>
+                  <span className="flex-1">
+                    {h.role} <span className="text-[11px] text-muted">· {h.level}</span>
+                  </span>
+                  {h.status === "done" && (
+                    <span className="font-mono text-[11px] text-muted">
+                      {h.postings} anúncios · {h.skills} habilidades
+                    </span>
+                  )}
+                  {h.status === "running" && <span className="text-[11px] text-muted">pesquisando…</span>}
+                  {h.status === "error" && <span className="text-[11px] text-down" title={h.error ?? ""}>falhou</span>}
+                  {h.id === activeId && <span className="flex items-center gap-1 text-[11px] text-ok"><Check size={11} /> usada no cronograma</span>}
+                  {h.status === "done" && h.id !== activeId && (
+                    <>
+                      <button onClick={() => onView(h.id)} className="text-[12px] text-accent underline-offset-2 hover:underline">
+                        ver
+                      </button>
+                      <button onClick={() => onUse(h.id)} className="btn-ghost px-2 py-0.5 text-[11px]">
+                        usar no cronograma
+                      </button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function ResearchView({ res, levels, patch }: { res: RoleResearch; levels: Record<string, SkillLevel>; patch(b: unknown): Promise<unknown> }) {
+  const known = res.skills.filter((s) => (levels[s.name] ?? 0) > 0).length;
   return (
     <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_320px]">
       <div className="panel p-4">
@@ -261,10 +369,23 @@ function ResearchView({ res, levels, status, patch }: { res: RoleResearch; level
             {res.postingsAnalyzed} anúncios · pesquisa de {br(res.researchedAt)}/{res.researchedAt.slice(0, 4)}
           </span>
         </div>
-        <p className="mt-1 text-[12px] text-muted">% dos anúncios que pedem cada habilidade. Marque o quanto você sabe: isso muda o &quot;pronto para a vaga&quot; e a prioridade do cronograma.</p>
-        <ul className="mt-3 flex flex-col gap-1.5">
+        <p className="mt-1 text-[12px] text-muted">
+          % dos anúncios que pedem cada habilidade. <span className="text-text">Clique no quadradinho do quanto você sabe</span>: isso muda o &quot;pronto para a vaga&quot; e a prioridade do cronograma. Tudo começa em &quot;não sei&quot;.
+        </p>
+        <div className="mt-3 grid grid-cols-[minmax(0,10rem)_1fr_auto] items-end gap-3 border-b border-border pb-1.5 sm:grid-cols-[minmax(0,14rem)_1fr_auto]">
+          <span className="font-mono text-[11px] text-muted">{known} de {res.skills.length} você já estuda ou domina</span>
+          <span />
+          <span className="flex gap-1">
+            {SKILL_LEVELS.map((l) => (
+              <span key={l.id} className={`w-14 text-center text-[10px] uppercase tracking-wide ${LEVEL_COLOR[l.id]}`}>
+                {l.title}
+              </span>
+            ))}
+          </span>
+        </div>
+        <ul className="mt-1.5 flex flex-col gap-1">
           {res.skills.map((s) => (
-            <SkillRow key={s.name} s={s} level={levels[s.name] ?? 0} marked={status[s.name] !== undefined} onLevel={(l) => patch({ op: "skill", name: s.name, level: l })} />
+            <SkillRow key={s.name} s={s} level={levels[s.name] ?? 0} onLevel={(l) => patch({ op: "skill", name: s.name, level: l })} />
           ))}
         </ul>
       </div>
@@ -310,10 +431,12 @@ function ResearchView({ res, levels, status, patch }: { res: RoleResearch; level
 
 const LEVEL_COLOR = ["text-muted", "text-warn", "text-ok"];
 
-function SkillRow({ s, level, marked, onLevel }: { s: Skill; level: SkillLevel; marked: boolean; onLevel(l: SkillLevel | null): void }) {
+const BOX_ON = ["border-muted bg-muted/30 text-text", "border-warn bg-warn/25 text-warn", "border-ok bg-ok/25 text-ok"];
+
+function SkillRow({ s, level, onLevel }: { s: Skill; level: SkillLevel; onLevel(l: SkillLevel): void }) {
   return (
     <li
-      className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-3 sm:grid-cols-[minmax(0,14rem)_1fr_auto]"
+      className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-3 rounded-md px-1 py-0.5 hover:bg-panel-2/50 sm:grid-cols-[minmax(0,14rem)_1fr_auto]"
       title={`${s.name}: ${s.frequency}% dos anúncios${s.must ? " (obrigatório na maioria)" : ""} · ${s.category}`}
     >
       <span className="truncate text-[13px]">
@@ -326,16 +449,24 @@ function SkillRow({ s, level, marked, onLevel }: { s: Skill; level: SkillLevel; 
         </span>
         <span className="w-9 text-right font-mono text-[11px] text-muted">{s.frequency}%</span>
       </span>
-      <span className="flex gap-0.5" role="group" aria-label={`O quanto você sabe de ${s.name}`}>
-        {SKILL_LEVELS.map((l) => (
-          <button
-            key={l.id}
-            onClick={() => onLevel(marked && level === l.id ? null : l.id)}
-            className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide transition-colors ${level === l.id ? `bg-panel-2 ${LEVEL_COLOR[l.id]} ${marked ? "ring-1 ring-current" : ""}` : "text-muted/60 hover:text-text"}`}
-          >
-            {l.title}
-          </button>
-        ))}
+      <span className="flex gap-1" role="radiogroup" aria-label={`O quanto você sabe de ${s.name}`}>
+        {SKILL_LEVELS.map((l) => {
+          const on = level === l.id;
+          return (
+            <span key={l.id} className="flex w-14 justify-center">
+              <button
+                role="radio"
+                aria-checked={on}
+                aria-label={l.title}
+                title={l.title}
+                onClick={() => !on && onLevel(l.id)}
+                className={`flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${on ? BOX_ON[l.id] : "border-border hover:border-text"}`}
+              >
+                {on && <Check size={12} strokeWidth={3} />}
+              </button>
+            </span>
+          );
+        })}
       </span>
     </li>
   );
@@ -408,11 +539,13 @@ function Trails({ c, patch, reload, onChat }: { c: CenterData; patch(b: unknown)
   );
 }
 
-export function TrailSummary({ t }: { t: Pick<Trail, "kind" | "importance" | "perWeek" | "sessionMin" | "deadline"> }) {
+export function TrailSummary({ t }: { t: Pick<Trail, "kind" | "importance" | "hours" | "deadline"> }) {
   return (
     <span className="font-mono text-[11px] text-muted">
       {kindOf(t.kind).title} · {"●".repeat(t.importance)}
-      {"○".repeat(3 - t.importance)} · {t.perWeek}x/semana · {t.sessionMin} min{t.deadline ? ` · até ${br(t.deadline)}` : ""}
+      {"○".repeat(3 - t.importance)}
+      {t.hours ? ` · ~${t.hours} h` : ""}
+      {t.deadline ? ` · data fixa ${br(t.deadline)}` : ""}
     </span>
   );
 }
@@ -449,26 +582,7 @@ function TrailCard({ t, patch, reload }: { t: Trail; patch(b: unknown): Promise<
         </span>
       </div>
       {project && <GithubLink t={t} onChanged={reload} />}
-      <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted">
-        <label className="flex items-center gap-1">
-          vezes/semana
-          <select disabled={busy} value={t.perWeek} onChange={(e) => edit({ op: "trail-update", trail: { ...t, perWeek: Number(e.target.value) } })}>
-            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1">
-          sessão
-          <select disabled={busy} value={t.sessionMin} onChange={(e) => edit({ op: "trail-update", trail: { ...t, sessionMin: Number(e.target.value) } })}>
-            {[10, 15, 20, 25, 30, 45, 60, 90].map((n) => (
-              <option key={n} value={n}>
-                {n} min
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <TrailScope t={t} busy={busy} onSave={(x) => edit({ op: "trail-update", trail: { ...t, ...x } })} />
       {(t.units.length > 0 || project) && (
         <details className="text-[13px]">
           <summary className="cursor-pointer text-[12px] text-muted">Ver {kindOf(t.kind).units}</summary>
@@ -520,8 +634,28 @@ function TrailCard({ t, patch, reload }: { t: Trail; patch(b: unknown): Promise<
   );
 }
 
+/** Horas estimadas e data fixa. O ritmo (vezes por semana, minutos) é com o cronograma. */
+function TrailScope({ t, busy, onSave }: { t: Trail; busy: boolean; onSave(x: Partial<Trail>): void }) {
+  const [hours, setHours] = useState(t.hours ? String(t.hours) : "");
+  useEffect(() => setHours(t.hours ? String(t.hours) : ""), [t.hours]);
+  const n = Number(hours) || null;
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted">
+      <label className="flex items-center gap-1" title="Estimativa da IA (ou sua) para a trilha inteira. O cronograma usa para calcular o ritmo.">
+        ~
+        <input type="number" min={0} max={2000} disabled={busy} value={hours} onChange={(e) => setHours(e.target.value)} onBlur={() => n !== t.hours && onSave({ hours: n })} className="w-16" placeholder="?" />h no total
+      </label>
+      <label className="flex items-center gap-1" title="Só se existir de verdade: data da prova, fim da matéria.">
+        data fixa
+        <input type="date" disabled={busy} value={t.deadline ?? ""} onChange={(e) => onSave({ deadline: e.target.value || null })} />
+      </label>
+      <span className="text-[11px]">o ritmo fica com o cronograma</span>
+    </div>
+  );
+}
+
 function TrailForm({ onSave, onCancel }: { onSave(t: unknown): Promise<void>; onCancel(): void }) {
-  const [f, setF] = useState({ kind: "livro", title: "", units: "", perWeek: 2, sessionMin: 25, importance: 2, deadline: "" });
+  const [f, setF] = useState({ kind: "livro", title: "", units: "", hours: "", importance: 2, deadline: "" });
   const kind = TRAIL_KINDS.find((k) => k.id === f.kind)!;
   return (
     <div className="panel mb-3 grid gap-3 p-4 text-sm md:grid-cols-2">
@@ -545,10 +679,7 @@ function TrailForm({ onSave, onCancel }: { onSave(t: unknown): Promise<void>; on
       </label>
       <div className="flex flex-wrap gap-3 md:col-span-2">
         <label className="flex items-center gap-1 text-[12px] text-muted">
-          vezes/semana <input type="number" min={1} max={7} value={f.perWeek} onChange={(e) => setF({ ...f, perWeek: Number(e.target.value) })} className="w-14" />
-        </label>
-        <label className="flex items-center gap-1 text-[12px] text-muted">
-          min por sessão <input type="number" min={10} max={120} step={5} value={f.sessionMin} onChange={(e) => setF({ ...f, sessionMin: Number(e.target.value) })} className="w-16" />
+          horas no total (estimativa) <input type="number" min={0} max={2000} value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} className="w-16" placeholder="?" />
         </label>
         <label className="flex items-center gap-1 text-[12px] text-muted">
           importância
@@ -559,11 +690,12 @@ function TrailForm({ onSave, onCancel }: { onSave(t: unknown): Promise<void>; on
           </select>
         </label>
         <label className="flex items-center gap-1 text-[12px] text-muted">
-          prazo <input type="date" value={f.deadline} onChange={(e) => setF({ ...f, deadline: e.target.value })} />
+          data fixa (se houver) <input type="date" value={f.deadline} onChange={(e) => setF({ ...f, deadline: e.target.value })} />
         </label>
       </div>
+      <p className="text-[11px] text-muted md:col-span-2">A trilha guarda o que precisa aprender. Quantas vezes por semana e de quantos minutos fica com o cronograma, pelo seu tempo livre.</p>
       <div className="flex gap-2 md:col-span-2">
-        <button disabled={!f.title.trim()} onClick={() => onSave({ ...f, units: f.units.split("\n") })} className="btn-neon px-4 py-2 text-xs disabled:opacity-40">
+        <button disabled={!f.title.trim()} onClick={() => onSave({ ...f, hours: Number(f.hours) || 0, units: f.units.split("\n") })} className="btn-neon px-4 py-2 text-xs disabled:opacity-40">
           Adicionar ▶
         </button>
         <button onClick={onCancel} className="btn-ghost px-3 py-2 text-xs">
@@ -736,6 +868,8 @@ function Plan({ data, c, patch, load }: { data: Data; c: CenterData; patch(b: un
         )}
       </div>
 
+      {data.pace && c.trails.length > 0 && <PaceBox p={data.pace} tips={s?.tips ?? []} />}
+
       {s && (
         <>
           {s.notes && <p className="mt-3 max-w-4xl text-[13px] leading-relaxed text-muted">{s.notes}</p>}
@@ -744,6 +878,20 @@ function Plan({ data, c, patch, load }: { data: Data; c: CenterData; patch(b: un
               <Day key={d} day={d} today={today} items={s.items.filter((i) => i.day === d)} checks={data.checks?.[d] ?? []} av={c.availability} trails={c.trails} onChange={load} />
             ))}
           </div>
+          {(data.versions?.length ?? 0) > 1 && (
+            <details className="panel mt-3 p-4 text-sm">
+              <summary className="cursor-pointer hud-label">Versões do cronograma ({data.versions!.length})</summary>
+              <ul className="mt-2 flex flex-col gap-1.5 text-[13px]">
+                {data.versions!.map((v, i) => (
+                  <li key={v.id}>
+                    <span className="font-mono text-[11px] text-muted">{new Date(v.createdAt).toLocaleDateString("pt-BR")}</span>
+                    {i === 0 && <span className="ml-2 text-[11px] text-ok">atual</span>} <span className="text-muted">· {v.items} blocos</span>
+                    {v.notes && <p className="text-[12px] text-muted">{v.notes}</p>}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           {s.outline.length > 0 && (
             <details className="panel mt-3 p-4 text-sm">
               <summary className="cursor-pointer hud-label">Próximas semanas (esboço)</summary>
@@ -759,6 +907,64 @@ function Plan({ data, c, patch, load }: { data: Data; c: CenterData; patch(b: un
         </>
       )}
     </Section>
+  );
+}
+
+/** Seu tempo (o cronograma usa este) x o que seria o ideal para chegar na data alvo, com dicas. */
+function PaceBox({ p, tips }: { p: Pace; tips: string[] }) {
+  const short = p.idealWeeklyMin != null && p.idealWeeklyMin > p.weeklyMin;
+  return (
+    <div className={`panel mt-3 grid gap-4 p-4 text-sm md:grid-cols-[1fr_1fr] ${short ? "!border-warn/60" : ""}`}>
+      <div>
+        <div className="hud-label">Seu tempo x o ideal</div>
+        {p.remainingHours > 0 ? (
+          <ul className="mt-2 flex flex-col gap-1.5 text-[13px]">
+            <li>
+              Faltam <span className="font-mono text-text">~{p.remainingHours} h</span> nas trilhas{p.unknown.length ? <span className="text-muted"> (sem estimativa: {p.unknown.join(", ")})</span> : ""}.
+            </li>
+            <li>
+              Você deu <span className="font-mono text-text">{hm(p.weeklyMin)}</span> por semana (já sem a folga)
+              {p.finishDate ? (
+                <>
+                  : nesse ritmo termina por volta de <span className="font-mono text-text">{br(p.finishDate)}/{p.finishDate.slice(0, 4)}</span>.
+                </>
+              ) : (
+                "."
+              )}
+            </li>
+            {p.targetDate && p.idealWeeklyMin != null && (
+              <li className={short ? "text-warn" : "text-ok"}>
+                {short ? (
+                  <>
+                    Para chegar em {br(p.targetDate)}, o ideal seria <span className="font-mono">{hm(p.idealWeeklyMin)}</span> por semana (~{Math.round(p.idealWeeklyMin / 7)} min por dia).
+                  </>
+                ) : (
+                  <>No seu tempo dá para chegar em {br(p.targetDate)}. 👍</>
+                )}
+              </li>
+            )}
+            {!p.targetDate && <li className="text-muted">Ponha uma data em &quot;pronto até&quot; para ver o ritmo ideal.</li>}
+          </ul>
+        ) : (
+          <p className="mt-2 text-[13px] text-muted">{p.unknown.length ? "Coloque as horas estimadas nas trilhas para ver o ritmo." : "Nada pendente nas trilhas."}</p>
+        )}
+        <p className="mt-2 text-[11px] text-muted">O cronograma sempre cabe no tempo que você deu. Isto é só um aviso: nada muda sozinho.</p>
+      </div>
+      <div>
+        <div className="flex items-center gap-1.5 hud-label">
+          <Lightbulb size={12} /> Dicas para chegar perto do ideal
+        </div>
+        {tips.length ? (
+          <ul className="mt-2 list-disc pl-5 text-[13px] text-muted">
+            {tips.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-[13px] text-muted">Aparecem quando a IA montar ou replanejar o cronograma.</p>
+        )}
+      </div>
+    </div>
   );
 }
 
