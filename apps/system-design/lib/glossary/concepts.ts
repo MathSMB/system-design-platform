@@ -90,8 +90,11 @@ export const CONCEPTS: GlossaryEntry[] = [
     body: [
       "Um grupo de servidores stateless cresce quando a CPU ou a fila passa de um limite e encolhe quando a carga cai. Economiza dinheiro fora do pico.",
       "Não é instantâneo: subir uma máquina leva de dezenas de segundos a minutos. Picos repentinos (abertura de vendas) precisam de capacidade reservada antes ou de fila na frente.",
+      "O jeito mais comum é por utilização alvo (target tracking na AWS, HPA no Kubernetes): a cada poucos segundos mede a CPU e pede instâncias = atuais × utilização ÷ alvo. Alvo de 60% deixa 40% de folga enquanto as novas instâncias sobem. Para descer, espera um tempo com folga, para não ficar subindo e descendo.",
     ],
-    related: ["escala-horizontal", "fator-de-pico", "fila"],
+    interview: "Diga o que dispara a escala (CPU, fila, requisições por instância), o mínimo e o máximo, e que o atraso de provisionamento não salva pico repentino: para evento previsto, escale antes.",
+    sim: "Marque \"Autoscaling\" no servidor. A cada 5 s ele mede a utilização e pede instâncias; elas só atendem depois do atraso para subir. O gráfico mostra as instâncias (linha laranja) e o painel, o custo em worker-horas.",
+    related: ["escala-horizontal", "fator-de-pico", "fila", "atraso-de-provisionamento", "custo-worker-hora"],
   },
   {
     id: "sharding",
@@ -104,7 +107,8 @@ export const CONCEPTS: GlossaryEntry[] = [
       "O custo é alto: consultas que cruzam shards ficam caras, transações entre shards são difíceis, e uma chave mal escolhida concentra a carga num shard só (hot spot). Rebalancear com o sistema no ar também é complexo.",
     ],
     interview: "Proponha sharding só depois de cache e réplicas, e diga a chave. Fale do hot spot (a celebridade com milhões de seguidores) e de consistent hashing para rebalancear.",
-    related: ["banco", "escala-horizontal"],
+    sim: "No nó Banco, \"Shards\" divide os dados entre N bancos iguais (cada um com os workers do nó). O nó mostra a ocupação de cada shard. Com sharding, o simulador ignora as réplicas de leitura.",
+    related: ["banco", "escala-horizontal", "shard-key", "hot-key", "consistent-hashing"],
     refs: [{ title: "Designing Data-Intensive Applications, cap. 6: Partitioning", by: "Martin Kleppmann" }],
   },
   {

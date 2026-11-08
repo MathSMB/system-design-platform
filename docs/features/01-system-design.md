@@ -81,7 +81,7 @@ Grade de 3 colunas ocupando `100vh - 48px`:
 2. **Centro**: o React Flow (`@xyflow/react`), `colorMode="dark"`, fundo transparente com **grade estilo blueprint** (linhas ciano a 3,5% a cada 24px e a 8% a cada 96px), controles e minimapa (nós ciano, máscara `rgba(5,6,11,.65)`). No canto superior esquerdo, um `panel` flutuante: "Duração [60] s", botão **▶ SIMULAR** (`btn-neon`), ícone de teclado (atalhos), "?" do glossário e ícone do tour.
 3. **Direita** (380px, 360px com mentor): Inspector do nó selecionado (campos do tipo, "Derrubar no segundo [20]", "Remover componente" em vermelho) e abas **SIMULAÇÃO / AVALIAÇÃO** (aba ativa ciano com sublinhado e glow).
 
-### Os 8 componentes
+### Os 9 componentes
 
 | Tipo | Ícone lucide | Cor neon | Parâmetros padrão |
 |---|---|---|---|
@@ -93,6 +93,9 @@ Grade de 3 colunas ocupando `100vh - 48px`:
 | Banco de dados | Database | `#ffb547` | 50 workers, 15 ms, fila 1000, 0 réplicas, atraso de replicação 10 ms, read-your-writes 0 |
 | Fila | Inbox | `#39ff8f` | capacidade 50.000, 4 consumidores |
 | Serviço externo | Plug | `#9fb4ff` | 10 workers, 300 ms, fila 100, 1% de erro |
+| Rate limiter (`rateLimiter`) | Gauge | `#ff8a3d` | 1.000 req/s, balde 200, por cliente |
+
+Campos opcionais (aparecem só quando valem): Usuários com **bot com defeito** (req/s de um cliente só); Servidor com **timeout das chamadas**, **thread presa**, **chave de idempotência** e **autoscaling** (mínimo, máximo, utilização alvo, atraso para subir); Banco com **shards**, **chave de sharding** (hash ou intervalo por data) e **tráfego numa chave só**.
 
 Cada campo do Inspector tem rótulo, ajuda curta e um "?" que abre o termo no glossário.
 
@@ -172,15 +175,19 @@ Simulação de eventos discretos (DES) com **seed fixa** (mesmo desenho, mesmo r
 - **Cache/CDN**: leitura é hit com probabilidade `hitRate` e responde ali; miss segue para a origem. Escrita passa direto e invalida a chave. Cache fora do ar: a aplicação cai direto na origem (é assim que nasce a **avalanche**).
 - **Servidor**: retries em dependências com backoff exponencial e full jitter (espera aleatória em `[0, 10 ms × 2^tentativa]`).
 - **Fila**: único ponto assíncrono; confirma na hora e os consumidores processam depois.
-- **Serviço externo**: falha com `errorRate`.
+- **Serviço externo**: falha com `errorRate`. Guarda as requisições já processadas: uma repetição (retry depois de timeout) é processada de novo e conta como **efeito duplicado** (cobrança em dobro), a não ser que venha com chave de idempotência.
+- **Rate limiter**: token bucket (reposição contínua de `ratePerSec`, balde de `burst`). Global: um balde para todos. Por cliente: só o bot gasta o próprio balde (cada usuário legítimo manda poucas req/s). O excesso volta na hora como erro `limited` (HTTP 429).
+- **Servidor com thread presa**: o worker fica ocupado do começo ao fim, inclusive esperando as dependências (sem isso, a espera não ocupa worker). A métrica `cpuUtilization` mostra quanto foi processamento. **Timeout das chamadas**: estourou, conta como falha da dependência (e pode ter retry); a resposta que chega depois é ignorada.
+- **Autoscaling**: a cada 5 s mede a utilização e pede `instâncias × utilização ÷ alvo` (como target tracking/HPA); as novas só atendem depois de `scaleDelaySec`; desce depois de 15 s com folga. A linha do tempo traz as instâncias de cada segundo e o resultado traz `workerHours` (workers × tempo de todos os servidores).
+- **Sharding**: N estações iguais; hash da chave (usuário, ou a requisição quando não há escritas) espalha por igual; intervalo por data manda todas as escritas e 70% das leituras ao último shard; `hotKeyShare` manda essa fração sempre ao primeiro. Com shards, as réplicas são ignoradas (aviso).
 - **Banco com réplicas**: leituras vão para as réplicas (cada uma com os mesmos workers do primário), escritas para o primário. Cada réplica aplica as escritas **numa thread só, em ordem** (como o replay do WAL no PostgreSQL). Aplicar custa 5% do tempo de serviço. Lag = atraso de rede + espera no replay + aplicar. Se o primário escreve mais rápido que o replay, o lag cresce sem limite (os testes conferem `T·(1 − μ/λ)`).
 - **Dado velho**: o motor guarda a última escrita confirmada de cada usuário; uma leitura que não enxerga essa escrita conta como `staleRead`. **Read-your-writes**: por `readYourWritesMs` após escrever, as leituras do usuário vão ao primário.
 - **Timeout**: o usuário desiste no timeout, mas o sistema continua trabalhando (desperdício que o diagnóstico aponta).
 - **Falhas programadas**: `{ nodeId, atSec, untilSec? }`; ao cair, a fila do nó é esvaziada rejeitando tudo.
 - Limite de 400.000 requisições para não travar o navegador (reduz a duração e avisa).
-- **Validação** antes de simular: precisa de Usuários conectados; Usuários não recebem conexões; LB precisa de saída; **sem ciclos**.
-- Saída: totais, erros por tipo (timeout, rejeitada, indisponível, dependência), latências (média, p50, p95, p99, máx), média em voo (Lei de Little), métricas por nó, linha do tempo por segundo, diagnóstico e avisos.
-- Testes conferem o motor contra a teoria: M/M/1 (latência = 1/(μ − λ)), Lei de Little, amplificação de retries, avalanche de cache e lag de réplica.
+- **Validação** antes de simular: precisa de Usuários conectados; Usuários não recebem conexões; LB e rate limiter precisam de saída; **sem ciclos**.
+- Saída: totais, erros por tipo (timeout, rejeitada, indisponível, dependência, limitada), erro só dos usuários legítimos (`legit`), bot enviado/barrado, efeitos duplicados, custo em worker-horas, latências (média, p50, p95, p99, máx), média em voo (Lei de Little), métricas por nó, linha do tempo por segundo, diagnóstico e avisos.
+- Testes conferem o motor contra a teoria: M/M/1 (latência = 1/(μ − λ)), Lei de Little, amplificação de retries, avalanche de cache e lag de réplica. Os casos da issue #16 têm testes próprios (`new-cases.test.ts`): taxa e rajada do token bucket, global × por cliente, Little com thread presa, timeout liberando thread, atraso e custo do autoscaling, distribuição dos shards e cobrança dupla com e sem chave de idempotência.
 
 ---
 
@@ -192,20 +199,27 @@ Simulação de eventos discretos (DES) com **seed fixa** (mesmo desenho, mesmo r
 
 Título "Aprenda com o mentor. **Depois, sem ajuda.**" Grade de cards (`sm:grid-cols-2`) com "AULA 01" (Press Start 2P 10px magenta), nível (básico verde, intermediário amarelo, avançado magenta), título, resumo, "N etapas" e o vídeo do Renato Augusto que inspira a aula.
 
-Aulas, na ordem da trilha (12):
+Aulas, na ordem da trilha (17):
 
 1. De 0 a 1 milhão de usuários
 2. Load balancer: round robin ou least connections?
-3. Cache-aside: hit rate e avalanche
-4. N+1 queries: a tela que derruba o banco
-5. Réplicas de leitura e o post que sumiu
-6. Réplica não é CQRS
-7. Fila para aguentar o pico da Black Friday
-8. Microsserviços: a conta que ninguém faz
-9. Cadeia síncrona × broker de eventos
-10. Retry storm: quando a ajuda derruba
-11. Hash de senha e a enxurrada de login
-12. Encurtador de URL
+3. Autoscaling: a live que começou antes das máquinas
+4. Cache-aside: hit rate e avalanche
+5. N+1 queries: a tela que derruba o banco
+6. Réplicas de leitura e o post que sumiu
+7. Sharding: a chave que esquentou um banco só
+8. Réplica não é CQRS
+9. Fila para aguentar o pico da Black Friday
+10. Microsserviços: a conta que ninguém faz
+11. Pool de threads: o antifraude lento que parou o checkout
+12. Cadeia síncrona × broker de eventos
+13. Retry storm: quando a ajuda derruba
+14. Pagamentos: retry sem cobrar duas vezes
+15. Rate limiter: o parceiro que entrou em loop
+16. Hash de senha e a enxurrada de login
+17. Encurtador de URL
+
+A aula pode definir a duração da simulação (`durationSec`; a de autoscaling usa 180 s).
 
 O roteiro segue o método do Renato Augusto: requisitos → estimativas → banco → desenho incremental → gargalos → trade-offs.
 
@@ -247,14 +261,14 @@ Exemplo real (aula 1): pergunta "Qual é a sua primeira pergunta?" (certa: "Quan
 
 ![Entrega do desafio](img/system-design/desafio-entrega.jpg)
 
-- 9 problemas (`Challenge`): Catálogo da Black Friday, Placar ao vivo da Copa, Feed de rede social, E-mail de confirmação de pedido, Venda de ingressos de um show, API de pagamentos, Encurtador de URL, Streaming de vídeo (YouTube), Sincronização do Drive. Botão de dado para **sortear** outro.
-- Estrutura: `{ id, title, brief, requirements[], load: {DAU, req/dia, pico, writeRatio}, slo: {p99Ms, errorRate}, mustHave?: componentes exigidos com parâmetros fixos, ask?: perguntas de requisito, followUps?: perguntas de aprofundamento }`.
+- 13 problemas (`Challenge`): Catálogo da Black Friday, Placar ao vivo da Copa, Feed de rede social, E-mail de confirmação de pedido, Venda de ingressos de um show, API de pagamentos, Encurtador de URL, Streaming de vídeo (YouTube), Sincronização do Drive, API pública com um cliente em loop, Checkout com antifraude lento, Live de lançamento às 20h e Banco de pedidos de um marketplace. Botão de dado para **sortear** outro.
+- Estrutura: `{ id, title, brief, requirements[], load: {DAU, req/dia, pico, writeRatio, pattern?, botRps?}, durationSec?, slo: {p99Ms, errorRate}, rules?: {blockingServers?, maxAvgWorkers?}, mustHave?: componentes exigidos com parâmetros fixos (e que precisam receber chamadas), ask?: perguntas de requisito, followUps?: perguntas de aprofundamento }`.
 - Fases: **enunciado → perguntas de requisito → estimativa → desenho até cumprir o SLO → aprofundamento → nota**. Relógio `mm:ss` rodando desde o início.
 - Conversa em bolhas: entrevistador à esquerda (ícone UserRound magenta, bolha com borda magenta a 40% e fundo magenta a 5%), candidato à direita (ícone ciano). Alternativas com letra A/B/C em mono. **Uma tentativa só, sem dica**; o gabarito comentado aparece no fim.
 - O canvas começa só com os Usuários do enunciado (e o que ele exigir), **travados** (não dá para apagar). Mudou o desenho, a nota antiga some.
 - Estimativa certa = dentro de ±20% do pico.
-- Entrega do desenho (`judge`): exige ter simulado no desenho atual, Usuários com a carga do enunciado e componentes exigidos intactos. 3 critérios = 3 estrelas: **Erros** ≤ SLO, **Latência p99** ≤ SLO, **Folga para pico** (nenhum componente fora de `ok`, isto é, nada acima de 70%). Passa se cumprir erros e latência.
-- Nota final em **5 estrelas**: média de (acertos das perguntas, estimativa certa, estrelas do desenho / 3) × 5, com o resumo "perguntas 2/3 · estimativa ✓ · desenho 3/3 · 12:40".
+- Entrega do desenho (`judge`): exige ter simulado no desenho atual, Usuários com a carga do enunciado e componentes exigidos intactos. 3 critérios = 3 estrelas: **Erros** ≤ SLO (com bot, só os usuários legítimos), **Latência p99** ≤ SLO, **Folga para pico** (nenhum componente fora de `ok`, isto é, nada acima de 70%). Com orçamento (`maxAvgWorkers`), uma 4ª estrela: **Orçamento** (workers pagos em média). Passa se cumprir erros e latência.
+- Nota final em **5 estrelas**: média de (acertos das perguntas, estimativa certa, estrelas do desenho / estrelas possíveis) × 5, com o resumo "perguntas 2/3 · estimativa ✓ · desenho 3/3 · 12:40".
 
 ---
 

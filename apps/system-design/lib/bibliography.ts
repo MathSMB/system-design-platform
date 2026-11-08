@@ -121,5 +121,20 @@ export const BIBLIOGRAPHY: BibSection[] = [
       { title: "An Investigation of the Therac-25 Accidents", by: "Nancy Leveson e Clark Turner, IEEE Computer, 1993", note: "O caso real da aula Therac-25." },
       { title: "Idempotent Consumer", by: "Chris Richardson", url: "https://microservices.io/patterns/communication-style/idempotent-consumer.html" },
     ],
+  },  {
+    id: "limites-e-escala",
+    title: "Limites, escala e pagamentos",
+    intro: "Complementos da plataforma para as aulas de rate limiter, pool de threads, autoscaling, sharding e pagamentos.",
+    fromMiro: false,
+    items: [
+      { title: "Scaling your API with rate limiters", by: "Stripe", url: "https://stripe.com/blog/rate-limiters", note: "Os quatro tipos de limite que a Stripe usa." },
+      { title: "Padrão Rate Limiting", by: "Microsoft Learn", url: "https://learn.microsoft.com/pt-br/azure/architecture/patterns/rate-limiting-pattern" },
+      { title: "Release It!, 2ª ed.", by: "Michael Nygard", note: "Thread presa, timeouts, bulkheads e circuit breaker." },
+      { title: "About Pool Sizing", by: "HikariCP (Brett Wooldridge)", url: "https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing", note: "Por que um pool menor costuma ser mais rápido." },
+      { title: "Target tracking scaling policies", by: "AWS", url: "https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html" },
+      { title: "Padrão Sharding", by: "Microsoft Learn", url: "https://learn.microsoft.com/pt-br/azure/architecture/patterns/sharding" },
+      { title: "Designing robust and predictable APIs with idempotency", by: "Stripe", url: "https://stripe.com/blog/idempotency" },
+      { title: "Making retries safe with idempotent APIs", by: "Amazon Builders' Library", url: "https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/" },
+    ],
   },
 ];

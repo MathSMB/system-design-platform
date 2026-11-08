@@ -22,6 +22,7 @@ export function validateGraph(graph: Graph): string[] {
   for (const n of graph.nodes) {
     if (n.kind === "client" && out(n.id).length === 0) problems.push(`Conecte "${name(n.id)}" ao primeiro componente do sistema.`);
     if (n.kind === "loadBalancer" && out(n.id).length === 0) problems.push(`O load balancer "${name(n.id)}" não tem para onde mandar tráfego.`);
+    if (n.kind === "rateLimiter" && out(n.id).length === 0) problems.push(`O rate limiter "${name(n.id)}" não tem para onde mandar o tráfego liberado.`);
   }
 
   // ciclos causariam chamadas infinitas

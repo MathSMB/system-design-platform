@@ -3,6 +3,7 @@ import { DEFAULT_PARAMS } from "@/components/canvas/defaults";
 import { all, clientPeakRps, count, linked, metricsOf, ofKind, reaches, SIMULATE } from "./checks";
 import { yt } from "./graph";
 import { BROKER_CASE, CQRS_CASE, LB_CASE, MICRO_CASE, N_PLUS_ONE_CASE, PASSWORD_CASE, QUEUE_CASE, RETRY_CASE } from "./study-sd";
+import { AUTOSCALE_CASE, PAYMENT_CASE, POOL_CASE, RATE_LIMIT_CASE, SHARDING_CASE } from "./study-limits";
 import type { GuidedCase } from "./types";
 
 const onlyUsers = (params: Record<string, unknown> = {}): Graph =>
@@ -461,14 +462,19 @@ const byId = (id: string) => BASE.find((c) => c.id === id)!;
 export const CASES: GuidedCase[] = [
   byId("zero-a-um-milhao"),
   LB_CASE,
+  AUTOSCALE_CASE,
   byId("avalanche-de-cache"),
   N_PLUS_ONE_CASE,
   byId("replicas-de-leitura"),
+  SHARDING_CASE,
   CQRS_CASE,
   QUEUE_CASE,
   MICRO_CASE,
+  POOL_CASE,
   BROKER_CASE,
   RETRY_CASE,
+  PAYMENT_CASE,
+  RATE_LIMIT_CASE,
   PASSWORD_CASE,
   byId("encurtador-de-url"),
 ];

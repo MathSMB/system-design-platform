@@ -261,7 +261,7 @@ function VerdictCard({ v }: { v: Verdict }) {
     <div className={`panel pop-in flex flex-col gap-2 p-3 ${v.passed ? "border-ok/60" : "border-down/60"}`}>
       <div className="flex items-center justify-between">
         <span className={`font-display text-[10px] ${v.passed ? "text-ok glow" : "text-down glow"}`}>{v.passed ? "SLO CUMPRIDO" : "SLO NÃO CUMPRIDO"}</span>
-        <Stars n={v.stars} />
+        <Stars n={v.stars} of={v.max} />
       </div>
       {v.items.map((it) => (
         <div key={it.label} className="flex justify-between gap-2 text-[13px]">
@@ -310,7 +310,7 @@ function Result({
   onReroll(): void;
 }) {
   const right = answers.filter((a) => a.q.choices[a.picked]?.correct).length;
-  const parts = [answers.length ? right / answers.length : 1, estOk ? 1 : 0, design ? design.stars / 3 : 0];
+  const parts = [answers.length ? right / answers.length : 1, estOk ? 1 : 0, design ? design.stars / design.max : 0];
   const score = parts.reduce((s, x) => s + x, 0) / parts.length;
   const stars = Math.round(score * 5);
   const label = score >= 0.8 ? "Forte: eu seguiria com você" : score >= 0.55 ? "Na média: depende das outras entrevistas" : "Ainda não: vale estudar e tentar de novo";
@@ -320,7 +320,7 @@ function Result({
         <Stars n={stars} of={5} />
         <div className={`font-display text-[10px] leading-relaxed ${score >= 0.8 ? "text-ok" : score >= 0.55 ? "text-warn" : "text-down"} glow`}>{label}</div>
         <div className="font-mono text-[11px] text-muted">
-          perguntas {right}/{answers.length} · estimativa {estOk ? "✓" : "✕"} · desenho {design ? `${design.stars}/3` : "não entregue"} · {time}
+          perguntas {right}/{answers.length} · estimativa {estOk ? "✓" : "✕"} · desenho {design ? `${design.stars}/${design.max}` : "não entregue"} · {time}
         </div>
       </div>
 

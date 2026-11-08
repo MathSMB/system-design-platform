@@ -5,16 +5,18 @@ import { percentile } from "./stats";
 import { validateGraph } from "./validate";
 import type {
   ClientParams,
+  DatabaseParams,
   Graph,
   NodeMetrics,
   ProcessingParams,
   SimConfig,
   SimNode,
+  ServerParams,
   SimResult,
   TimelinePoint,
 } from "./types";
 
-type ErrorCause = "rejected" | "unavailable" | "dependency";
+type ErrorCause = "rejected" | "unavailable" | "dependency" | "limited";
 type Reply = (ok: boolean, cause?: ErrorCause) => void;
 
 interface Req {
@@ -27,6 +29,12 @@ interface Req {
   commitAt?: number;
   /** Escritas: instante em que o usuário recebeu a confirmação. */
   ackAt?: number;
+  /** Chave de roteamento (sharding): o usuário quando há escritas, senão a própria requisição. */
+  key: number;
+  /** Veio do bot (cliente com defeito)? */
+  bot?: boolean;
+  /** As chamadas levam chave de idempotência (o destino não processa a repetição de novo). */
+  idem?: boolean;
 }
 
 /**
@@ -95,31 +103,75 @@ export function simulate(graph: Graph, config: SimConfig): SimResult {
   return new Simulation(graph, config).run();
 }
 
+/** Ao terminar o próprio processamento. Com hold, recebe release() para soltar o worker depois. */
+type OnServed = (release: () => void) => void;
+
 class Station {
   busy = 0;
   busyTimeMs = 0;
   maxQueue = 0;
   served = 0;
-  private waiting: { onServed: () => void; onReject: () => void }[] = [];
+  /** Workers agora (muda com autoscaling). */
+  workers: number;
+  private capArea = 0;
+  private capSince = 0;
+  /** Workers presos (hold) ainda não soltos: início de cada um, para somar no fim. */
+  private holding = new Map<number, number>();
+  private holdId = 0;
+  private waiting: { onServed: OnServed; onReject: () => void; hold: boolean }[] = [];
   private head = 0;
 
   constructor(
     private sim: Simulation,
     private p: ProcessingParams,
-  ) {}
+    workers?: number,
+  ) {
+    this.workers = workers ?? p.workers;
+  }
 
   get queueLength(): number {
     return this.waiting.length - this.head;
   }
 
-  enter(onServed: () => void, onReject: () => void): void {
-    if (this.busy < this.p.workers) {
-      this.start(onServed);
+  /**
+   * Entra na estação. hold = true: o worker continua ocupado depois do processamento,
+   * até alguém chamar release() (thread presa esperando dependências).
+   */
+  enter(onServed: OnServed, onReject: () => void, hold = false): void {
+    if (this.busy < this.workers) {
+      this.start(onServed, hold);
     } else if (this.queueLength < this.p.queueCapacity) {
-      this.waiting.push({ onServed, onReject });
+      this.waiting.push({ onServed, onReject, hold });
       this.maxQueue = Math.max(this.maxQueue, this.queueLength);
     } else {
       onReject();
+    }
+  }
+
+  /** Muda a quantidade de workers (autoscaling). Diminuir não interrompe quem já está sendo atendido. */
+  setWorkers(n: number): void {
+    this.capArea += this.workers * (this.sim.now - this.capSince);
+    this.capSince = this.sim.now;
+    this.workers = n;
+    this.pump();
+  }
+
+  /** Workers × tempo disponíveis até o fim, em ms (denominador da utilização). */
+  capacityMs(endMs: number): number {
+    return this.capArea + this.workers * (endMs - this.capSince);
+  }
+
+  /** Tempo ocupado, somando quem ainda está preso no fim da simulação. */
+  totalBusyMs(endMs: number): number {
+    let open = 0;
+    for (const t of this.holding.values()) open += Math.max(0, endMs - t);
+    return this.busyTimeMs + open;
+  }
+
+  private pump(): void {
+    while (this.queueLength > 0 && this.busy < this.workers) {
+      const item = this.next()!;
+      this.start(item.onServed, item.hold);
     }
   }
 
@@ -137,18 +189,38 @@ class Station {
     return item;
   }
 
-  private start(onServed: () => void): void {
+  private start(onServed: OnServed, hold: boolean): void {
     this.busy++;
     const s = sampleService(this.sim.rng, this.p.serviceTimeMs, this.p.distribution, this.p.cv ?? 1);
-    this.busyTimeMs += Math.max(0, Math.min(s, this.sim.endMs - this.sim.now));
+    if (!hold) {
+      this.busyTimeMs += Math.max(0, Math.min(s, this.sim.endMs - this.sim.now));
+      this.sim.schedule(s, () => {
+        this.busy--;
+        this.served++;
+        onServed(noop);
+        this.pump();
+      });
+      return;
+    }
+    const id = this.holdId++;
+    const since = this.sim.now;
+    this.holding.set(id, since);
     this.sim.schedule(s, () => {
-      this.busy--;
       this.served++;
-      onServed();
-      if (this.queueLength > 0 && this.busy < this.p.workers) this.start(this.next()!.onServed);
+      let released = false;
+      onServed(() => {
+        if (released) return;
+        released = true;
+        this.holding.delete(id);
+        this.busy--;
+        this.busyTimeMs += Math.max(0, Math.min(this.sim.now, this.sim.endMs) - since);
+        this.pump();
+      });
     });
   }
 }
+
+const noop = () => {};
 
 interface NodeRuntime {
   node: SimNode;
@@ -164,6 +236,18 @@ interface NodeRuntime {
   replicas?: Replica[];
   reads: number;
   staleReads: number;
+  /** Banco com sharding: uma estação por shard. */
+  shards?: Station[];
+  /** Autoscaling: instâncias atuais, máximo atingido e o histórico de pedidos (para o diagnóstico). */
+  scale?: { instances: number; max: number; per: number; firstAskAt?: number; firstAddAt?: number; hitMax: boolean };
+  /** Chamadas a dependências que estouraram o timeout. */
+  callTimeouts: number;
+  /** Serviço externo: chamadas processadas, repetições processadas de novo e repetições reconhecidas pela chave. */
+  processed: number;
+  duplicates: number;
+  deduped: number;
+  limited: number;
+  limitedBot: number;
   resume?: () => void;
   handle(req: Req, reply: Reply): void;
   onDown?(): void;
@@ -187,12 +271,15 @@ class Simulation {
   private inFlightArea = 0;
   private lastChange = 0;
   private latencies: number[] = [];
-  private errors = { timeout: 0, rejected: 0, unavailable: 0, dependency: 0 };
+  private errors = { timeout: 0, rejected: 0, unavailable: 0, dependency: 0, limited: 0 };
+  private legit = { ok: 0, err: 0 };
+  private botSent = 0;
+  private hasBot = false;
   private succeeded = 0;
   private completedAfterWarmup = 0;
   /** Última escrita confirmada de cada usuário (para detectar leitura de dado velho). */
   private lastAckedWrite = new Map<number, Req>();
-  private buckets: { offered: number; ok: number; err: number; lat: number[] }[] = [];
+  private buckets: { offered: number; ok: number; err: number; lat: number[]; instances?: number }[] = [];
 
   constructor(
     private graph: Graph,
@@ -205,7 +292,7 @@ class Simulation {
     const maxReq = config.maxRequests ?? 400_000;
     const peakRps = graph.nodes
       .filter((n) => n.kind === "client")
-      .reduce((s, n) => s + baseRps(n.params as ClientParams) * (n.params as ClientParams).peakFactor, 0);
+      .reduce((s, n) => s + baseRps(n.params as ClientParams) * (n.params as ClientParams).peakFactor + ((n.params as ClientParams).botRps ?? 0), 0);
     this.simulatedSec = config.durationSec;
     if (peakRps * config.durationSec > maxReq) {
       this.simulatedSec = Math.max(1, Math.floor(maxReq / peakRps));
@@ -259,6 +346,12 @@ class Simulation {
       maxQueue: 0,
       reads: 0,
       staleReads: 0,
+      callTimeouts: 0,
+      processed: 0,
+      duplicates: 0,
+      deduped: 0,
+      limited: 0,
+      limitedBot: 0,
       handle: () => {},
     };
     const deps = () => this.downstream.get(node.id) ?? [];
@@ -290,36 +383,65 @@ class Simulation {
       }
 
       case "server": {
-        const st = new Station(this, node.params);
-        rt.station = st;
         const p = node.params;
-        rt.handle = (req, reply) => {
-          st.enter(() => {
-            // chama as dependências em sequência, na ordem das conexões
-            const list = deps();
-            const step = (i: number, attempt: number) => {
-              if (i >= list.length) return reply(true);
-              const depId = list[i]!;
-              this.call(depId, req, (ok, cause) => {
-                if (ok) return step(i + 1, 0);
-                // cache fora do ar: a aplicação cai direto na origem (é assim que nasce a avalanche)
-                const dep = this.runtimes.get(depId)!.node;
-                const origin = this.downstream.get(depId)?.[0];
-                if (cause === "unavailable" && (dep.kind === "cache" || dep.kind === "cdn") && origin) {
-                  this.call(origin, req, (ok2) => (ok2 ? step(i + 1, 0) : reply(false, "dependency")));
-                  return;
-                }
-                if (attempt < p.retries) {
-                  // backoff exponencial com full jitter: espera aleatória em [0, 10ms × 2^tentativa]
-                  this.schedule(this.rng() * 10 * 2 ** attempt, () => step(i, attempt + 1));
-                  return;
-                }
-                reply(false, "dependency");
-              });
-            };
-            step(0, 0);
-          }, reject(reply));
+        const scale = p.autoscale ? this.setupAutoscale(rt, p) : undefined;
+        const st = new Station(this, p, scale ? p.workers * scale.instances : undefined);
+        rt.station = st;
+        const timeoutMs = p.callTimeoutMs ?? 0;
+        // chamada a uma dependência, com timeout opcional (a resposta que chega depois é ignorada)
+        const callDep = (depId: string, req: Req, cb: Reply) => {
+          if (timeoutMs <= 0) return this.call(depId, req, cb);
+          let settled = false;
+          this.schedule(timeoutMs, () => {
+            if (settled) return;
+            settled = true;
+            rt.callTimeouts++;
+            cb(false, "dependency");
+          });
+          this.call(depId, req, (ok, cause) => {
+            if (settled) return;
+            settled = true;
+            cb(ok, cause);
+          });
         };
+        rt.handle = (req, reply) => {
+          if (p.idempotencyKey) req.idem = true;
+          st.enter(
+            (release) => {
+              // modelo bloqueante: a thread só é solta quando a resposta sai
+              const done: Reply = (ok, cause) => {
+                release();
+                reply(ok, cause);
+              };
+              // chama as dependências em sequência, na ordem das conexões
+              const list = deps();
+              const step = (i: number, attempt: number) => {
+                if (i >= list.length) return done(true);
+                const depId = list[i]!;
+                callDep(depId, req, (ok, cause) => {
+                  if (ok) return step(i + 1, 0);
+                  // cache fora do ar: a aplicação cai direto na origem (é assim que nasce a avalanche)
+                  const dep = this.runtimes.get(depId)!.node;
+                  const origin = this.downstream.get(depId)?.[0];
+                  if (cause === "unavailable" && (dep.kind === "cache" || dep.kind === "cdn") && origin) {
+                    this.call(origin, req, (ok2) => (ok2 ? step(i + 1, 0) : done(false, "dependency")));
+                    return;
+                  }
+                  if (attempt < p.retries) {
+                    // backoff exponencial com full jitter: espera aleatória em [0, 10ms × 2^tentativa]
+                    this.schedule(this.rng() * 10 * 2 ** attempt, () => step(i, attempt + 1));
+                    return;
+                  }
+                  done(false, "dependency");
+                });
+              };
+              step(0, 0);
+            },
+            reject(reply),
+            !!p.blocking,
+          );
+        };
+        if (scale) this.runAutoscale(rt, p, st);
         break;
       }
 
@@ -352,6 +474,12 @@ class Simulation {
           }, reject(reply));
         };
 
+        const nShards = Math.max(1, Math.floor(p.shards ?? 1));
+        if (nShards > 1) {
+          this.setupShards(rt, p, nShards);
+          break;
+        }
+
         rt.handle = (req, reply) => {
           if (req.write) {
             st.enter(() => {
@@ -372,11 +500,51 @@ class Simulation {
       case "external": {
         const st = new Station(this, node.params);
         rt.station = st;
-        rt.handle = (_req, reply) =>
+        // requisições já processadas: uma repetição (retry depois de timeout) é processada de novo,
+        // a não ser que venha com chave de idempotência (aí devolve o resultado guardado)
+        const done = new Set<number>();
+        rt.handle = (req, reply) =>
           st.enter(() => {
-            if (this.rng() < node.params.errorRate) reply(false, "dependency");
-            else reply(true);
+            if (this.rng() < node.params.errorRate) return reply(false, "dependency");
+            if (done.has(req.id)) {
+              if (req.idem) {
+                rt.deduped++;
+                return reply(true);
+              }
+              rt.duplicates++;
+            } else done.add(req.id);
+            rt.processed++;
+            reply(true);
           }, reject(reply));
+        break;
+      }
+
+      case "rateLimiter": {
+        const p = node.params;
+        // token bucket: o balde enche a ratePerSec até burst; cada requisição gasta um token
+        const bucket = () => ({ tokens: p.burst, last: 0 });
+        const global = bucket();
+        const botBucket = bucket();
+        const take = (b: { tokens: number; last: number }) => {
+          b.tokens = Math.min(p.burst, b.tokens + ((this.now - b.last) * p.ratePerSec) / 1000);
+          b.last = this.now;
+          if (b.tokens < 1) return false;
+          b.tokens -= 1;
+          return true;
+        };
+        rt.handle = (req, reply) => {
+          // por cliente: cada usuário legítimo manda poucas requisições por segundo e nunca esvazia
+          // o próprio balde; só o bot (um cliente só, mandando muito) é barrado
+          const ok = p.scope === "perClient" ? (req.bot ? take(botBucket) : true) : take(global);
+          if (!ok) {
+            rt.limited++;
+            if (req.bot) rt.limitedBot++;
+            return reply(false, "limited"); // HTTP 429, na hora
+          }
+          const target = deps()[0];
+          if (!target) return reply(true);
+          this.call(target, req, reply);
+        };
         break;
       }
 
@@ -440,9 +608,94 @@ class Simulation {
       rt.onDown = () => {
         st.flush();
         for (const r of rt.replicas ?? []) r.station.flush();
+        for (const sh of rt.shards ?? []) sh.flush();
       };
     }
     return rt;
+  }
+
+  /** Banco dividido em shards: cada shard é um banco com os mesmos workers; a chave decide para onde vai. */
+  private setupShards(rt: NodeRuntime, p: DatabaseParams, n: number): void {
+    const shards = Array.from({ length: n }, () => new Station(this, p));
+    rt.shards = shards;
+    const hot = Math.min(1, Math.max(0, p.hotKeyShare ?? 0));
+    const key = p.shardKey ?? "hash";
+    if ((p.readReplicas ?? 0) > 0) this.warnings.push("Com sharding, o simulador ignora as réplicas de leitura.");
+    const pick = (req: Req): number => {
+      // a chave quente (ex.: perfil de celebridade) sempre cai no mesmo shard
+      if (hot > 0 && this.rng() < hot) return 0;
+      if (key === "range") {
+        // intervalo por data: tudo que é novo fica no último shard; leitura costuma ser do que é recente
+        if (req.write || this.rng() < 0.7) return n - 1;
+        return Math.floor(this.rng() * (n - 1));
+      }
+      return hashKey(req.key) % n;
+    };
+    rt.handle = (req, reply) => {
+      shards[pick(req)]!.enter(() => {
+        if (req.write) req.commitAt = this.now;
+        else rt.reads++;
+        reply(true);
+      }, () => {
+        rt.rejected++;
+        reply(false, "rejected");
+      });
+    };
+  }
+
+  private setupAutoscale(rt: NodeRuntime, p: ServerParams) {
+    const min = Math.max(1, Math.floor(p.minInstances ?? 1));
+    rt.scale = { instances: min, max: min, per: p.workers, hitMax: false };
+    return rt.scale;
+  }
+
+  /**
+   * Autoscaling por utilização alvo (como o target tracking da AWS e o HPA do Kubernetes):
+   * a cada 5 s mede a utilização e pede instâncias = atuais × utilização ÷ alvo.
+   * As novas só atendem depois do atraso de provisionamento. Desce devagar, depois de 15 s com folga.
+   */
+  private runAutoscale(rt: NodeRuntime, p: ServerParams, st: Station): void {
+    const sc = rt.scale!;
+    const min = sc.instances;
+    const max = Math.max(min, Math.floor(p.maxInstances ?? 10));
+    const target = Math.min(0.95, Math.max(0.1, p.targetUtilization ?? 0.6));
+    const delayMs = Math.max(0, p.scaleDelaySec ?? 60) * 1000;
+    const windowMs = 5000;
+    let pending = 0;
+    let lastBusy = 0;
+    let lastCap = 0;
+    let calm = 0;
+    const tick = () => {
+      if (this.now >= this.endMs) return;
+      const busy = st.totalBusyMs(this.now);
+      const cap = st.capacityMs(this.now);
+      const util = cap > lastCap ? Math.min(1, (busy - lastBusy) / (cap - lastCap)) : 0;
+      lastBusy = busy;
+      lastCap = cap;
+      const desired = Math.min(max, Math.max(min, Math.ceil((sc.instances * util) / target)));
+      if (desired > sc.instances + pending) {
+        const add = desired - sc.instances - pending;
+        pending += add;
+        sc.firstAskAt ??= this.now;
+        if (desired >= max) sc.hitMax = true;
+        this.schedule(delayMs, () => {
+          pending -= add;
+          sc.instances += add;
+          sc.max = Math.max(sc.max, sc.instances);
+          sc.firstAddAt ??= this.now;
+          st.setWorkers(sc.per * sc.instances);
+        });
+        calm = 0;
+      } else if (desired < sc.instances && pending === 0 && util < target * 0.5) {
+        if (++calm >= 3) {
+          sc.instances = desired;
+          st.setWorkers(sc.per * sc.instances);
+          calm = 0;
+        }
+      } else calm = 0;
+      this.schedule(windowMs, tick);
+    };
+    this.schedule(windowMs, tick);
   }
 
   private startClient(node: Extract<SimNode, { kind: "client" }>): void {
@@ -473,6 +726,19 @@ class Simulation {
       });
     };
     next();
+    // o bot: um cliente só, com defeito, mandando requisições num ritmo constante
+    const botRps = p.botRps ?? 0;
+    if (botRps > 0) {
+      this.hasBot = true;
+      const nextBot = () => {
+        this.schedule(sampleExponential(this.rng, 1000 / botRps), () => {
+          if (this.now >= this.endMs) return;
+          this.issue(target, p, false, -1, true);
+          nextBot();
+        });
+      };
+      nextBot();
+    }
   }
 
   private trackInFlight(): void {
@@ -484,8 +750,12 @@ class Simulation {
     return this.buckets[Math.min(this.buckets.length - 1, Math.floor(t / 1000))]!;
   }
 
-  private issue(target: string, p: ClientParams, write: boolean, user: number): void {
-    const req: Req = { id: this.nextId++, start: this.now, write, user };
+  private issue(target: string, p: ClientParams, write: boolean, user: number, bot = false): void {
+    const id = this.nextId++;
+    // sem escritas o usuário não é sorteado: cada requisição vira uma chave diferente
+    const key = bot ? -1 : (p.writeRatio ?? 0) > 0 ? user : id;
+    const req: Req = { id, start: this.now, write, user, key, bot };
+    if (bot) this.botSent++;
     this.trackInFlight();
     this.inFlight.set(req.id, req.start);
     this.bucket(this.now).offered++;
@@ -497,6 +767,7 @@ class Simulation {
       const b = this.bucket(this.now);
       if (ok && lat <= p.timeoutMs) {
         this.succeeded++;
+        if (!bot) this.legit.ok++;
         b.ok++;
         b.lat.push(lat);
         if (req.start >= this.warmupMs) {
@@ -515,6 +786,7 @@ class Simulation {
         }
       } else {
         b.err++;
+        if (!bot) this.legit.err++;
         this.errors[ok ? "timeout" : (cause ?? "dependency")]++;
       }
     });
@@ -524,12 +796,23 @@ class Simulation {
       this.trackInFlight();
       this.inFlight.delete(req.id);
       this.errors.timeout++;
+      if (!bot) this.legit.err++;
       this.bucket(this.now).err++;
     });
   }
 
   run(): SimResult {
     for (const n of this.graph.nodes) if (n.kind === "client") this.startClient(n);
+    const scaled = [...this.runtimes.values()].filter((r) => r.scale);
+    if (scaled.length > 0) {
+      // instâncias de cada segundo, para o gráfico
+      const sample = () => {
+        if (this.now >= this.endMs) return;
+        this.bucket(this.now).instances = scaled.reduce((a, r) => a + r.scale!.instances, 0);
+        this.schedule(1000, sample);
+      };
+      sample();
+    }
     for (const f of this.config.failures ?? []) {
       this.events.push(f.atSec * 1000, () => {
         const rt = this.runtimes.get(f.nodeId);
@@ -570,8 +853,13 @@ class Simulation {
         let utilization = 0;
         let maxQueue = 0;
         let throughput = rt.arrivals / durSec;
-        if (rt.station && "workers" in n.params) {
-          utilization = rt.station.busyTimeMs / (n.params.workers * this.endMs);
+        if (rt.shards) {
+          const utils = rt.shards.map((sh) => sh.totalBusyMs(this.endMs) / sh.capacityMs(this.endMs));
+          utilization = Math.max(...utils);
+          maxQueue = Math.max(...rt.shards.map((sh) => sh.maxQueue));
+          throughput = rt.shards.reduce((a, sh) => a + sh.served, 0) / durSec;
+        } else if (rt.station && "workers" in n.params) {
+          utilization = rt.station.totalBusyMs(this.endMs) / rt.station.capacityMs(this.endMs);
           maxQueue = rt.station.maxQueue;
           throughput = (rt.station.served + (rt.replicas ?? []).reduce((a, r) => a + r.station.served, 0)) / durSec;
         } else if (n.kind === "queue") {
@@ -596,6 +884,19 @@ class Simulation {
           m.reads = rt.reads;
           m.staleReads = rt.staleReads;
         }
+        if (rt.shards) {
+          m.shardUtilization = rt.shards.map((sh) => sh.totalBusyMs(this.endMs) / sh.capacityMs(this.endMs));
+        }
+        if (n.kind === "server") {
+          if (rt.scale) m.instances = { end: rt.scale.instances, max: rt.scale.max };
+          if (rt.callTimeouts > 0) m.callTimeouts = rt.callTimeouts;
+          if (n.params.blocking && rt.station) {
+            // quanto do tempo das threads foi processamento de verdade (o resto é espera)
+            m.cpuUtilization = Math.min(1, (rt.station.served * n.params.serviceTimeMs) / rt.station.capacityMs(this.endMs));
+          }
+        }
+        if (n.kind === "external") m.effects = { processed: rt.processed, duplicates: rt.duplicates };
+        if (n.kind === "rateLimiter") m.limited = { total: rt.limited, bot: rt.limitedBot };
         if (rt.replicas?.length && n.kind === "database") {
           const workers = n.params.workers;
           m.replicaUtilization = Math.max(...rt.replicas.map((r) => r.station.busyTimeMs / (workers * this.endMs)));
@@ -624,8 +925,16 @@ class Simulation {
         errorRps: b.err,
         p50Ms: percentile(s, 50),
         p99Ms: percentile(s, 99),
+        ...(b.instances !== undefined ? { instances: b.instances } : {}),
       };
     });
+
+    // capacidade paga: workers × tempo de cada servidor (worker-horas)
+    let coreMs = 0;
+    for (const n of this.graph.nodes) {
+      const rt = this.runtimes.get(n.id)!;
+      if (n.kind === "server" && rt.station) coreMs += rt.station.capacityMs(this.endMs);
+    }
 
     const result: SimResult = {
       durationSec: this.config.durationSec,
@@ -646,6 +955,16 @@ class Simulation {
         dbReads: nodes.reduce((a, m) => a + (m.reads ?? 0), 0),
         staleReads: nodes.reduce((a, m) => a + (m.staleReads ?? 0), 0),
       },
+      legit: {
+        total: this.legit.ok + this.legit.err,
+        succeeded: this.legit.ok,
+        errorRate: this.legit.ok + this.legit.err > 0 ? this.legit.err / (this.legit.ok + this.legit.err) : 0,
+      },
+      ...(this.hasBot
+        ? { bot: { sent: this.botSent, limited: nodes.reduce((a, m) => a + (m.limited?.bot ?? 0), 0) } }
+        : {}),
+      duplicateEffects: nodes.reduce((a, m) => a + (m.effects?.duplicates ?? 0), 0),
+      workerHours: coreMs / 3_600_000,
       nodes,
       timeline,
       diagnosis: [],
@@ -658,6 +977,11 @@ class Simulation {
   private isDownAtEnd(id: string): boolean {
     return this.runtimes.get(id)?.down ?? false;
   }
+}
+
+/** Hash inteiro simples (Knuth): espalha chaves vizinhas entre os shards. */
+function hashKey(k: number): number {
+  return Math.imul(k | 0, 2654435761) >>> 0;
 }
 
 export function baseRps(p: ClientParams): number {

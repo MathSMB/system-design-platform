@@ -9,4 +9,5 @@ export const KIND_LABEL: Record<NodeKind, string> = {
   database: "Banco de dados",
   queue: "Fila",
   external: "Serviço externo",
+  rateLimiter: "Rate limiter",
 };

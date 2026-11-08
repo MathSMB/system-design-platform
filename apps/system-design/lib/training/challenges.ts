@@ -192,6 +192,16 @@ export const CHALLENGES: Challenge[] = [
         c("Conferir se já existe um pagamento igual antes de inserir", "Conferir e inserir são dois passos: corrida."),
         c("Pedir para o lojista não repetir", "Timeout acontece; ele vai repetir."),
       ], "A chave única transforma repetição em leitura."),
+      q("Timeout do gateway", "O gateway de pagamento às vezes demora 3 s. A sua API desiste em 1 s e tenta de novo. O que pode acontecer?", [
+        c("Cobrança dupla: a primeira chamada pode ter sido processada; o retry precisa mandar a mesma Idempotency-Key", "Isso: timeout não é falha. Na aula \"Pagamentos: retry sem cobrar duas vezes\" dá para ver acontecer.", true),
+        c("Nada: se deu timeout, o gateway não processou", "Não dá para saber: a resposta pode só ter demorado."),
+        c("O retry sempre resolve", "Resolve o erro e cria a cobrança em dobro."),
+      ], "Retry em operação que muda estado só com chave de idempotência; e sempre com limite, backoff e jitter."),
+      q("Gravar e avisar", "Depois de gravar o pagamento, a API publica um evento para o lojista. Como não perder o evento se o processo cair entre os dois passos?", [
+        c("Transactional outbox: grava o evento numa tabela na mesma transação; um relay publica depois, e o consumidor é idempotente", "Isso: o evento só existe se o pagamento existe, e a entrega é pelo menos uma vez.", true),
+        c("Publicar antes de gravar", "Se a gravação falhar, o lojista recebe um pagamento que não existe."),
+        c("Publicar depois do commit e torcer", "Se o processo cair no meio, o evento some."),
+      ], "Outbox + consumidor idempotente; o Renato tem um vídeo sobre dual write."),
       q("Dinheiro", "Por que não guardar o valor em float?", [
         c("Float não representa 0,1 exatamente; use inteiro em centavos ou decimal", "Isso: 0,1 + 0,2 ≠ 0,3 em float.", true),
         c("Float ocupa muito espaço", "O problema é precisão, não espaço."),
@@ -293,6 +303,152 @@ export const CHALLENGES: Challenge[] = [
         c("Sim, é mais simples", "2 GB por byte alterado."),
         c("Comprime e reenvia", "Ainda reenvia tudo."),
       ], "Chunking + hash de conteúdo."),
+    ],
+  },  {
+    id: "api-publica-frete",
+    title: "API pública com um cliente em loop",
+    brief:
+      "Uma API pública de cotação de frete atende lojas virtuais. Um parceiro publicou uma integração com bug que repete a mesma chamada 3.000 vezes por segundo. Proteja os outros clientes sem estourar o orçamento.",
+    requirements: [
+      "Cotar frete (só leitura): 1 milhão de usuários ativos no dia, 20 requisições cada, pico de 3× a média",
+      "Um cliente com defeito manda 3.000 req/s o tempo todo (já está no nó Usuários); ele pode levar 429",
+      "p99 abaixo de 300 ms e menos de 1% de erros para os usuários legítimos",
+      "Orçamento: no máximo 64 workers de servidor em média",
+    ],
+    load: { dailyActiveUsers: 1_000_000, requestsPerUserPerDay: 20, peakFactor: 3, writeRatio: 0, botRps: 3000 },
+    slo: { p99Ms: 300, errorRate: 0.01 },
+    rules: { maxAvgWorkers: 64 },
+    ask: [
+      q("Quem é quem", "Entrevistador: \"Precisamos limitar o abuso.\" O que você pergunta primeiro?", [
+        c("Como identificamos o cliente: cada lojista tem uma chave de API?", "Isso: a chave do limite decide quem é barrado. Sem identificação, sobra o IP.", true),
+        c("Qual linguagem a API usa", "Não muda o desenho."),
+        c("Se podemos desligar a API do parceiro", "Hoje é ele; amanhã é outro. Precisamos de uma regra para todos."),
+      ], "Limite por chave de API (ou usuário autenticado). IP é o último recurso: muitos usuários atrás de um NAT parecem um só."),
+    ],
+    followUps: [
+      q("Algoritmo", "Qual algoritmo você usa para \"10 requisições por segundo por cliente\" e por quê?", [
+        c("Token bucket: dois números por cliente, aceita uma rajada do tamanho do balde e depois segura no ritmo", "Isso: é o que Stripe, AWS e NGINX usam.", true),
+        c("Janela fixa de 1 segundo", "Simples, mas deixa passar o dobro na virada da janela."),
+        c("Guardar o horário de cada requisição", "É a janela deslizante exata: funciona, mas gasta memória por requisição."),
+      ], "Token bucket ou contador deslizante ponderado; janela fixa só se a rajada de 2× for aceitável."),
+      q("Vários gateways", "São 5 instâncias do gateway. Onde fica o contador?", [
+        c("No Redis, com uma operação atômica (INCR com EXPIRE ou script Lua)", "Isso: um contador compartilhado e sem corrida entre ler e gravar.", true),
+        c("Na memória de cada instância", "O limite real vira 5×."),
+        c("No Postgres, com SELECT e depois UPDATE", "Lento para cada requisição e com corrida entre o SELECT e o UPDATE."),
+      ], "Se o Redis cair, decida antes: fail open (deixa passar) ou fail closed (barra)."),
+      q("A resposta", "O que o cliente barrado recebe?", [
+        c("HTTP 429 com Retry-After e cabeçalhos de limite (quanto resta e quando renova)", "Isso: o cliente bem-comportado sabe quando tentar de novo.", true),
+        c("HTTP 500", "500 diz que o erro é seu, e o cliente tenta de novo na hora."),
+        c("Nada: a conexão fica esperando", "Segurar conexão gasta recurso seu."),
+      ], "429 Too Many Requests é o código certo; 503 com Retry-After é para quando o servidor inteiro está sobrecarregado."),
+    ],
+  },
+  {
+    id: "checkout-antifraude",
+    title: "Checkout com antifraude lento",
+    brief:
+      "Um checkout em Spring MVC (uma thread por requisição) grava a compra e consulta um antifraude externo. Na Black Friday o antifraude está respondendo em ~1 s. A compra não pode parar.",
+    requirements: [
+      "Finalizar compra: 1,08 milhão de usuários ativos no dia, 8 requisições cada, pico de 5× a média",
+      "Servidores com thread por requisição: ligue \"Thread presa\" em todos",
+      "O Antifraude é fixo (lento, ~1 s) e toda compra precisa passar por ele; a compra pode ficar \"em análise\"",
+      "p99 abaixo de 500 ms e menos de 1% de erros",
+    ],
+    load: { dailyActiveUsers: 1_080_000, requestsPerUserPerDay: 8, peakFactor: 5, writeRatio: 0.3 },
+    slo: { p99Ms: 500, errorRate: 0.01 },
+    rules: { blockingServers: true },
+    mustHave: [{ kind: "external", label: "Antifraude", params: { workers: 2000, serviceTimeMs: 1000, queueCapacity: 100, errorRate: 0, distribution: "lognormal", cv: 1 } }],
+    ask: [
+      q("Pode esperar?", "Entrevistador: \"Toda compra passa pelo antifraude.\" O que você pergunta?", [
+        c("O cliente precisa do resultado da análise na hora, ou a compra pode ficar \"em análise\" e o pagamento ser capturado depois?", "Isso: decide se o antifraude fica no caminho síncrono.", true),
+        c("Quantas threads o Tomcat tem", "Importa, mas vem depois de saber se precisa esperar."),
+        c("Qual o fornecedor do antifraude", "Não muda o desenho."),
+      ], "Se a resposta pode vir depois, a dependência lenta sai do caminho da requisição."),
+    ],
+    followUps: [
+      q("Threads", "Com 500 compras/s e o antifraude em 1 s, quantas threads o checkout síncrono precisaria?", [
+        c("~500: Lei de Little, chegadas × tempo de espera", "Isso. E se o antifraude for para 3 s, 1.500.", true),
+        c("~5: só o tempo de CPU conta", "A thread fica presa durante a espera, não só na CPU."),
+        c("200, o padrão do Tomcat", "O padrão não sabe quanto tempo as suas dependências demoram."),
+      ], "Threads ocupadas = vazão × tempo total da requisição."),
+      q("Bulkhead", "Se o antifraude tivesse de continuar síncrono, como proteger o resto do serviço?", [
+        c("Pool de threads separado e limitado para ele, com timeout curto e fallback", "Isso: se ele travar, só esse pool esgota; catálogo e carrinho seguem.", true),
+        c("Aumentar o pool geral para 2.000", "Mais memória e o mesmo problema quando ele piorar."),
+        c("Retry com 3 tentativas", "Multiplica a carga num serviço que já está lento."),
+      ], "Bulkhead + timeout + circuit breaker são os padrões de estabilidade do Release It!."),
+    ],
+  },
+  {
+    id: "live-lancamento",
+    title: "Live de lançamento às 20h",
+    brief:
+      "Uma plataforma de cursos faz uma live com desconto às 20h. O tráfego multiplica por 5 de uma vez e volta ao normal depois de um minuto. Atenda o pico sem pagar capacidade sobrando.",
+    requirements: [
+      "Navegar e comprar: 1,73 milhão de usuários ativos no dia, 20 requisições cada; média até 60 s, pico de 5× de 60 a 120 s, média de novo",
+      "A simulação dura 180 s",
+      "p99 abaixo de 300 ms e menos de 1% de erros",
+      "Orçamento: no máximo 60 workers de servidor em média",
+    ],
+    load: { dailyActiveUsers: 1_728_000, requestsPerUserPerDay: 20, peakFactor: 5, writeRatio: 0.05, pattern: "spike" },
+    durationSec: 180,
+    slo: { p99Ms: 300, errorRate: 0.01 },
+    rules: { maxAvgWorkers: 60 },
+    ask: [
+      q("Previsível?", "Entrevistador: \"O pico é de 5×.\" O que você pergunta?", [
+        c("O pico tem hora marcada? Quanto tempo leva para subir uma instância?", "Isso: com hora marcada, a capacidade pode chegar antes; e o atraso diz se o autoscaling reativo chega a tempo.", true),
+        c("Qual a cor do botão de compra", "Não muda a capacidade."),
+        c("Se podemos usar Kubernetes", "A ferramenta vem depois do problema."),
+      ], "Pico previsto se resolve com escala agendada; o reativo cobre o que fugir da previsão."),
+    ],
+    followUps: [
+      q("Autoscaling basta?", "Por que só o autoscaling reativo, com VMs que sobem em 60 s, não aguenta esse pico?", [
+        c("Ele só reage depois que o pico começa, e a instância nova chega quando o pico já passou", "Isso: medir + decidir + provisionar é mais lento que o pico.", true),
+        c("Porque o autoscaling não funciona com Java", "Funciona; o problema é o tempo de reação."),
+        c("Aguenta, se o alvo de CPU for 90%", "Alvo alto deixa menos folga, e as máquinas chegam igualmente atrasadas."),
+      ], "Para pico repentino: escala agendada, warm pool, containers que sobem em segundos, ou fila para absorver."),
+      q("Custo", "Fora da live o tráfego é 5× menor. Como não pagar o pico o dia todo?", [
+        c("Mínimo baixo no dia a dia e escala agendada para a janela da live (sobe 19h50, desce 21h)", "Isso: paga o pico só durante o evento.", true),
+        c("Deixar sempre no tamanho do pico", "Seguro e 5× mais caro o dia todo."),
+        c("Desligar a API fora do horário", "Os usuários usam o dia todo."),
+      ], "Arquiteto de soluções: SLO com o menor custo."),
+    ],
+  },
+  {
+    id: "pedidos-marketplace",
+    title: "Banco de pedidos de um marketplace",
+    brief:
+      "Um marketplace grava pedidos, itens e mudanças de status num Postgres. A escrita cresceu além do que uma máquina aguenta. Divida o banco.",
+    requirements: [
+      "Criar e acompanhar pedidos: 6 milhões de usuários ativos no dia, 50 requisições cada, pico de 2× a média",
+      "60% das requisições são escritas",
+      "\"Meus pedidos\" (os pedidos de um cliente) precisa ser rápido",
+      "p99 abaixo de 300 ms e menos de 1% de erros",
+    ],
+    load: { dailyActiveUsers: 6_000_000, requestsPerUserPerDay: 50, peakFactor: 2, writeRatio: 0.6 },
+    slo: { p99Ms: 300, errorRate: 0.01 },
+    ask: [
+      q("Por onde dividir", "Entrevistador: \"Vamos fragmentar o banco.\" O que você pergunta antes de escolher a chave?", [
+        c("Quais são as consultas mais comuns? Elas são por cliente, por loja ou por data?", "Isso: a shard key segue o acesso, para a consulta comum cair num shard só.", true),
+        c("Quantos shards o Postgres aceita", "Vem depois de saber por qual chave dividir."),
+        c("Se dá para usar UUID", "É detalhe do id, não da divisão."),
+      ], "Boa chave: alta afinidade, alta cardinalidade, distribuição uniforme."),
+    ],
+    followUps: [
+      q("Chave por data", "Por que não fragmentar por data de criação do pedido?", [
+        c("Chave que só cresce: todo pedido novo cai no último intervalo, que fica quente", "Isso: range com chave monotônica concentra a escrita.", true),
+        c("Porque datas não são únicas", "A chave não precisa ser única para rotear."),
+        c("Porque range sharding não existe no Postgres", "Existe particionamento por intervalo; o problema é a carga concentrada."),
+      ], "Use hash de customer_id; para relatórios por data, uma base analítica separada."),
+      q("Rebalancear", "Vocês vão de 3 para 5 shards com hash(chave) mod N. O que acontece?", [
+        c("~80% das chaves mudam de shard; com consistent hashing (ou slots lógicos), só ~40%", "Isso: mod N rebalanceia quase tudo.", true),
+        c("Nada, as chaves ficam onde estão", "O resto da divisão muda para a maioria das chaves."),
+        c("Só os dados novos vão para os shards novos", "O roteador passaria a procurar os dados antigos no lugar errado."),
+      ], "Vitess, Citus, MongoDB e Redis Cluster já fazem isso por você."),
+      q("Loja gigante", "Uma loja passa a ser metade do tráfego. E agora?", [
+        c("A chave dela fica quente: cache e réplicas para a leitura, shard dedicado ou chave com sufixo para a escrita", "Isso: hash espalha chaves diferentes, não a mesma chave.", true),
+        c("Adicionar shards", "A chave continua inteira num shard só."),
+        c("Trocar a chave para data", "Volta o problema do último intervalo."),
+      ], "Hotspot: trate a chave quente à parte."),
     ],
   },
 ];

@@ -10,11 +10,13 @@ export function TimelineChart({ points }: { points: TimelinePoint[] }) {
   useEffect(() => {
     const el = ref.current;
     if (!el || points.length === 0) return;
+    const scaled = points.some((p) => p.instances !== undefined);
     const data: uPlot.AlignedData = [
       points.map((p) => p.t),
       points.map((p) => p.okRps),
       points.map((p) => p.errorRps),
       points.map((p) => p.p99Ms),
+      ...(scaled ? [points.map((p) => p.instances ?? null)] : []),
     ];
     const axis = { stroke: "#7d8bab", grid: { stroke: "#151b30" }, ticks: { stroke: "#151b30" } };
     const plot = new uPlot(
@@ -22,7 +24,7 @@ export function TimelineChart({ points }: { points: TimelinePoint[] }) {
         width: el.clientWidth,
         height: 160,
         legend: { show: true },
-        scales: { x: { time: false } },
+        scales: { x: { time: false }, ...(scaled ? { inst: { range: (_u: uPlot, _min: number, max: number) => [0, Math.max(2, max * 1.2)] as uPlot.Range.MinMax } } : {}) },
         axes: [
           { ...axis, label: "segundos" },
           { ...axis, label: "req/s", size: 60 },
@@ -33,6 +35,7 @@ export function TimelineChart({ points }: { points: TimelinePoint[] }) {
           { label: "ok/s", stroke: "#39ff8f", width: 1.5 },
           { label: "erros/s", stroke: "#ff4d6d", width: 1.5 },
           { label: "p99 (ms)", stroke: "#22e4ff", width: 1.5, scale: "ms" },
+          ...(scaled ? [{ label: "instâncias", stroke: "#ff8a3d", width: 2, scale: "inst", dash: [6, 4] }] : []),
         ],
       },
       data,
