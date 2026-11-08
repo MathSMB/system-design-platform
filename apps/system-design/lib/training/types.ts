@@ -77,7 +77,25 @@ export interface Challenge {
   /** Requisitos funcionais e não funcionais, como o entrevistador falaria. */
   requirements: string[];
   /** Carga que o desenho precisa aguentar (nó Usuários). */
-  load: { dailyActiveUsers: number; requestsPerUserPerDay: number; peakFactor: number; writeRatio: number };
+  load: {
+    dailyActiveUsers: number;
+    requestsPerUserPerDay: number;
+    peakFactor: number;
+    writeRatio: number;
+    /** Padrão do tráfego. Padrão: constante no pico. */
+    pattern?: "constant" | "ramp" | "spike";
+    /** Bot com defeito somado ao tráfego (req/s). */
+    botRps?: number;
+  };
+  /** Duração da simulação, em segundos. Padrão 60. */
+  durationSec?: number;
+  /** Regras extras do enunciado, conferidas na entrega. */
+  rules?: {
+    /** Os servidores são de thread por requisição: todos precisam estar com "Thread presa" ligado. */
+    blockingServers?: boolean;
+    /** Orçamento: média de workers pagos nos servidores (worker-horas ÷ tempo simulado). Vira uma estrela a mais. */
+    maxAvgWorkers?: number;
+  };
   slo: { p99Ms: number; errorRate: number };
   /** Componentes que o enunciado exige (ex.: provedor externo). */
   mustHave?: { kind: NodeKind; label: string; params: Record<string, unknown> }[];
