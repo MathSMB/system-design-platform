@@ -29,6 +29,7 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
   if (data.kind === "client") {
     const p = data.params as unknown as ClientParams;
     sub = `pico ≈ ${Math.round(baseRps(p) * p.peakFactor).toLocaleString("pt-BR")} req/s`;
+    if (p.botRps) sub += ` + bot ${Math.round(p.botRps).toLocaleString("pt-BR")}`;
   } else if (metrics && data.kind !== "loadBalancer") {
     sub = data.kind === "queue" ? `fila máx ${metrics.maxQueue.toLocaleString("pt-BR")}` : `${Math.round(metrics.utilization * 100)}% ocupado`;
     if (metrics.replicaUtilization !== undefined) {
