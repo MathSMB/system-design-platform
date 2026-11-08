@@ -13,7 +13,7 @@ export function CaseCanvas({ id }: { id: string }) {
     s.loadGraph(c.start);
     // os Usuários definem a carga da aula: não podem ser apagados
     s.setLocked(c.start.nodes.filter((n) => n.kind === "client").map((n) => n.id));
-    s.set({ problem: `${c.title}: ${c.summary}` });
+    s.set({ problem: `${c.title}: ${c.summary}`, durationSec: c.durationSec ?? 60 });
   }, [c]);
   return <Canvas coach={<Coach c={c} onRestart={setup} />} setup={setup} />;
 }

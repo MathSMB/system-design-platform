@@ -59,6 +59,8 @@ export interface GuidedCase {
   story?: string;
   /** Desenho inicial do canvas. */
   start: Graph;
+  /** Duração da simulação nesta aula, em segundos. Padrão 60. */
+  durationSec?: number;
   steps: Step[];
   /** "Como falar na entrevista": frases curtas que resumem o raciocínio. */
   talk?: string[];
