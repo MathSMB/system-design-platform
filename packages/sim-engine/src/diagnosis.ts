@@ -7,11 +7,22 @@ const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toLocaleString("pt-BR
 
 /** "utilização de 90%" ou, com réplicas, "primário em 40%, réplicas até 90%". */
 function utilText(m: NodeMetrics): string {
+  if (m.shardUtilization) return `shards em ${m.shardUtilization.map(fmtPct).join(" / ")}`;
   if (m.replicaUtilization === undefined) return `utilização de ${fmtPct(m.utilization)}`;
   return `primário em ${fmtPct(m.utilization)}, réplicas até ${fmtPct(m.replicaUtilization)}`;
 }
 
 function adviceFor(m: NodeMetrics): string {
+  if (m.shardUtilization) {
+    const sorted = [...m.shardUtilization].sort((a, b) => a - b);
+    if (sorted[sorted.length - 1]! > 2 * Math.max(0.05, sorted[0]!)) {
+      return "Um shard está muito mais quente que os outros: a chave concentra a carga (chave por data ou uma chave muito acessada). Troque para hash de uma chave com alta cardinalidade ou espalhe a chave quente (sufixo aleatório, cache na frente).";
+    }
+    return "Todos os shards estão cheios: adicione shards (com consistent hashing, para mover poucas chaves) ou tire carga com cache.";
+  }
+  if (m.kind === "server" && m.cpuUtilization !== undefined && m.cpuUtilization < m.utilization * 0.5) {
+    return `Só ${fmtPct(m.cpuUtilization)} do tempo das threads é processamento: o resto é **thread presa esperando dependência**. Pela Lei de Little, threads ocupadas = vazão × tempo de espera. Ponha timeout curto nas chamadas, isole a dependência lenta num pool próprio (bulkhead) ou use um modelo assíncrono.`;
+  }
   if (m.kind === "database" && m.replicaUtilization !== undefined) {
     return m.replicaUtilization > m.utilization
       ? "As réplicas de leitura estão saturadas: adicione réplicas ou coloque um cache na frente."
@@ -96,6 +107,44 @@ export function diagnose(graph: Graph, r: SimResult): string[] {
       : "Correções: mostrar a escrita a partir do que o usuário enviou (otimista) ou avisar que está processando.";
     out.push(
       `**${fmtInt(staleReads)} leituras (${fmtPct(staleReads / Math.max(1, dbReads))} das leituras no banco) devolveram dado velho**: o usuário escreveu e, ao ler logo depois, não viu a própria escrita, porque ${cause}. ${fix}`,
+    );
+  }
+
+  if (r.errors.limited > 0) {
+    const legitLimited = r.errors.limited - (r.bot?.limited ?? 0);
+    const who =
+      r.bot && legitLimited > 0
+        ? ` Delas, ${fmtInt(legitLimited)} eram de usuários legítimos: o balde é global e o bot gasta os tokens de todo mundo. Limite **por cliente** (chave de API, usuário ou IP).`
+        : r.bot
+          ? " Todas do bot: os usuários legítimos passaram."
+          : "";
+    out.push(`O **rate limiter** barrou ${fmtInt(r.errors.limited)} requisições com HTTP 429, na hora e sem gastar servidor.${who}`);
+  }
+
+  for (const m of r.nodes) {
+    if (m.instances && m.instances.max > 0) {
+      const n = graph.nodes.find((x) => x.id === m.nodeId);
+      if (n?.kind !== "server" || !n.params.autoscale) continue;
+      const delay = n.params.scaleDelaySec ?? 60;
+      if (r.errorRate > 0.01) {
+        out.push(
+          `O **autoscaling** de **${label(m.nodeId)}** subiu até ${m.instances.max} instâncias, mas cada uma leva ${delay} s para começar a atender. Enquanto isso o pico bate nas instâncias que já existiam. Para pico repentino: mínimo maior antes do evento (escala agendada), instâncias pré-aquecidas, ou fila para absorver.`,
+        );
+      }
+      if (n.params.maxInstances !== undefined && m.instances.max >= n.params.maxInstances && m.status === "bad") {
+        out.push(`**${label(m.nodeId)}** bateu no máximo de ${n.params.maxInstances} instâncias do autoscaling.`);
+      }
+    }
+    if (m.callTimeouts) {
+      const n = graph.nodes.find((x) => x.id === m.nodeId);
+      const t = n?.kind === "server" ? n.params.callTimeoutMs : undefined;
+      out.push(`${fmtInt(m.callTimeouts)} chamadas de **${label(m.nodeId)}** estouraram o timeout de ${fmtMs(t ?? 0)} e foram tratadas como falha (a thread foi liberada).`);
+    }
+  }
+
+  if (r.duplicateEffects > 0) {
+    out.push(
+      `**${fmtInt(r.duplicateEffects)} chamadas foram processadas em dobro** no serviço externo (ex.: cobrança dupla). O servidor desistiu por timeout e tentou de novo, mas a primeira chamada tinha chegado e foi processada. Mande uma **chave de idempotência** em cada chamada: o destino reconhece a repetição e devolve o resultado da primeira.`,
     );
   }
 

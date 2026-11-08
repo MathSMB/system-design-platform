@@ -8,7 +8,8 @@ export type NodeKind =
   | "cdn"
   | "database"
   | "queue"
-  | "external";
+  | "external"
+  | "rateLimiter";
 
 export type ServiceDistribution = "exponential" | "lognormal" | "constant";
 
@@ -42,6 +43,11 @@ export interface ClientParams {
    * (ex.: postar um comentário e a página recarregar). 0 ou ausente: não lê de volta.
    */
   readAfterWriteMs?: number;
+  /**
+   * Tráfego extra de UM cliente com defeito (bot, integração em loop), em req/s, constante.
+   * Soma-se ao tráfego dos usuários legítimos. 0 ou ausente: não há bot.
+   */
+  botRps?: number;
 }
 
 export interface LoadBalancerParams {
@@ -51,6 +57,35 @@ export interface LoadBalancerParams {
 export interface ServerParams extends ProcessingParams {
   /** Tentativas extras quando uma dependência falha. */
   retries: number;
+  /**
+   * Thread presa (modelo bloqueante, uma thread por requisição): o worker fica ocupado
+   * enquanto espera as dependências, não só durante o próprio processamento.
+   * Ausente/false: o worker é liberado e a espera não ocupa thread (modelo assíncrono).
+   */
+  blocking?: boolean;
+  /** Timeout de cada chamada a uma dependência, em ms. Estourou: conta como falha (e pode ter retry). 0 ou ausente: espera para sempre. */
+  callTimeoutMs?: number;
+  /** Envia chave de idempotência nas chamadas: o destino reconhece a repetição e não processa de novo. */
+  idempotencyKey?: boolean;
+  /** Autoscaling: workers passa a ser por instância e o número de instâncias muda com a carga. */
+  autoscale?: boolean;
+  /** Autoscaling: instâncias mínimas (e iniciais). Padrão 1. */
+  minInstances?: number;
+  /** Autoscaling: instâncias máximas. Padrão 10. */
+  maxInstances?: number;
+  /** Autoscaling: utilização alvo (0 a 1). Acima dela, pede mais instâncias. Padrão 0,6. */
+  targetUtilization?: number;
+  /** Autoscaling: segundos entre pedir uma instância e ela começar a atender (subir VM, imagem, aquecer). Padrão 60. */
+  scaleDelaySec?: number;
+}
+
+export interface RateLimiterParams {
+  /** Requisições por segundo liberadas (reposição do token bucket). */
+  ratePerSec: number;
+  /** Tamanho do balde: rajada máxima aceita de uma vez. */
+  burst: number;
+  /** global: um balde para todo mundo. perClient: um balde por cliente (o bot não gasta o balde dos outros). */
+  scope: "global" | "perClient";
 }
 
 export interface CacheParams extends ProcessingParams {
@@ -80,6 +115,16 @@ export interface DatabaseParams extends ProcessingParams {
    * 0 ou ausente: toda leitura vai para as réplicas.
    */
   readYourWritesMs?: number;
+  /** Sharding: quantos bancos dividem os dados (cada um com os workers acima). 1 ou ausente: sem sharding. */
+  shards?: number;
+  /**
+   * Sharding: chave de particionamento.
+   * hash: hash(user_id) mod N, espalha por igual.
+   * range: intervalos por data de criação; tudo que é novo (todas as escritas e a maior parte das leituras) cai no último shard.
+   */
+  shardKey?: "hash" | "range";
+  /** Sharding: fração do tráfego numa chave só (ex.: perfil de celebridade), que sempre cai no mesmo shard (0 a 1). */
+  hotKeyShare?: number;
 }
 
 export type NodeParamsByKind = {
@@ -91,6 +136,7 @@ export type NodeParamsByKind = {
   database: DatabaseParams;
   queue: QueueParams;
   external: ExternalParams;
+  rateLimiter: RateLimiterParams;
 };
 
 export type SimNode = {
@@ -151,6 +197,18 @@ export interface NodeMetrics {
   staleReads?: number;
   /** Leituras que chegaram a este banco. */
   reads?: number;
+  /** Banco com sharding: utilização de cada shard (0 a 1). A utilização do nó é a do shard mais carregado. */
+  shardUtilization?: number[];
+  /** Servidor com thread presa: fração do tempo das threads gasta processando (o resto é espera por dependências). */
+  cpuUtilization?: number;
+  /** Servidor: chamadas a dependências que estouraram o timeout. */
+  callTimeouts?: number;
+  /** Autoscaling: instâncias no fim e o máximo atingido. */
+  instances?: { end: number; max: number };
+  /** Serviço externo: chamadas processadas e quantas foram repetições processadas de novo (ex.: cobrança em dobro). */
+  effects?: { processed: number; duplicates: number };
+  /** Rate limiter: requisições barradas (HTTP 429) e quantas delas eram do bot. */
+  limited?: { total: number; bot: number };
 }
 
 export interface TimelinePoint {
@@ -160,6 +218,8 @@ export interface TimelinePoint {
   errorRps: number;
   p50Ms: number;
   p99Ms: number;
+  /** Soma das instâncias dos servidores com autoscaling naquele segundo (só quando há autoscaling). */
+  instances?: number;
 }
 
 export interface SimResult {
@@ -168,13 +228,21 @@ export interface SimResult {
   simulatedSec: number;
   totalRequests: number;
   succeeded: number;
-  errors: { timeout: number; rejected: number; unavailable: number; dependency: number };
+  errors: { timeout: number; rejected: number; unavailable: number; dependency: number; limited: number };
   errorRate: number;
   latency: { meanMs: number; p50Ms: number; p95Ms: number; p99Ms: number; maxMs: number };
   /** Requisições simultâneas em voo, em média (para checar a Lei de Little). */
   avgInFlight: number;
   /** Consistência das leituras nos bancos: quantas viram dado velho (não incluíam a escrita do próprio usuário). */
   consistency: { dbReads: number; staleReads: number };
+  /** Só os usuários legítimos (sem o bot): é o que importa para o SLO quando há bot. */
+  legit: { total: number; succeeded: number; errorRate: number };
+  /** Bot (cliente com defeito): quanto mandou e quanto foi barrado pelo rate limiter. */
+  bot?: { sent: number; limited: number };
+  /** Chamadas processadas em dobro nos serviços externos (ex.: cobrança dupla por retry sem idempotência). */
+  duplicateEffects: number;
+  /** Capacidade paga nos servidores: workers × segundos, em worker-horas (com autoscaling, conta as instâncias de cada momento). */
+  workerHours: number;
   nodes: NodeMetrics[];
   timeline: TimelinePoint[];
   diagnosis: string[];
