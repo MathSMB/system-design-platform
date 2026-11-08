@@ -25,6 +25,21 @@ const FIELD_HELP: Record<string, string> = {
   capacity: "fila",
   consumers: "fila",
   errorRate: "externo",
+  botRps: "bot",
+  callTimeoutMs: "timeout-de-chamada",
+  blocking: "thread-presa",
+  idempotencyKey: "idempotencia",
+  autoscale: "autoscaling",
+  minInstances: "autoscaling",
+  maxInstances: "autoscaling",
+  targetUtilization: "autoscaling",
+  scaleDelaySec: "atraso-de-provisionamento",
+  shards: "sharding",
+  shardKey: "shard-key",
+  hotKeyShare: "hot-key",
+  ratePerSec: "token-bucket",
+  burst: "token-bucket",
+  scope: "rate-limiting",
 };
 const KIND_HELP: Record<string, string> = {
   client: "usuarios",
@@ -35,6 +50,7 @@ const KIND_HELP: Record<string, string> = {
   database: "banco",
   queue: "fila",
   external: "externo",
+  rateLimiter: "rate-limiting",
 };
 import { useCanvas } from "./store";
 
@@ -58,7 +74,16 @@ export function Inspector() {
         <span className="text-muted">Nome</span>
         <input value={label} onChange={(e) => updateNode(node.id, { label: e.target.value })} />
       </label>
-      {FIELDS[kind].map((f) => (
+      {FIELDS[kind].filter((f) => !f.showIf || f.showIf(params)).map((f) => f.type === "toggle" ? (
+        <label key={f.key} className="flex flex-col gap-1">
+          <span className="flex items-center gap-2">
+            <input type="checkbox" checked={!!params[f.key]} onChange={(e) => updateNode(node.id, { params: { ...params, [f.key]: e.target.checked } })} />
+            <span>{f.label}</span>
+            {FIELD_HELP[f.key] && <HelpDot id={FIELD_HELP[f.key]!} label={f.label} />}
+          </span>
+          {f.help && <span className="text-[11px] text-muted">{f.help}</span>}
+        </label>
+      ) : (
         <label key={f.key} className="flex flex-col gap-1">
           <span className="flex items-center gap-1.5 text-muted">
             {f.label} {FIELD_HELP[f.key] && <HelpDot id={FIELD_HELP[f.key]!} label={f.label} />}
@@ -69,11 +94,11 @@ export function Inspector() {
               step={f.step ?? 1}
               min={f.min}
               max={f.max}
-              value={Number(params[f.key] ?? 0)}
+              value={Number(params[f.key] ?? f.def ?? 0)}
               onChange={(e) => updateNode(node.id, { params: { ...params, [f.key]: Number(e.target.value) } })}
             />
           ) : (
-            <select value={String(params[f.key])} onChange={(e) => updateNode(node.id, { params: { ...params, [f.key]: e.target.value } })}>
+            <select value={String(params[f.key] ?? f.options[0]!.value)} onChange={(e) => updateNode(node.id, { params: { ...params, [f.key]: e.target.value } })}>
               {f.options.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}

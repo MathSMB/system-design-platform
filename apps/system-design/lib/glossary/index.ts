@@ -1,12 +1,13 @@
 import { COMPONENTS } from "./components";
 import { CONCEPTS } from "./concepts";
 import { CONCURRENCY } from "./concurrency";
+import { LIMITS } from "./limits";
 import { METRICS, SIM } from "./sim";
 import type { GlossaryEntry } from "./types";
 
 export * from "./types";
 
-export const GLOSSARY: GlossaryEntry[] = [...COMPONENTS, ...SIM, ...METRICS, ...CONCEPTS, ...CONCURRENCY];
+export const GLOSSARY: GlossaryEntry[] = [...COMPONENTS, ...SIM, ...METRICS, ...CONCEPTS, ...LIMITS, ...CONCURRENCY];
 
 const BY_ID = new Map(GLOSSARY.map((e) => [e.id, e]));
 export const glossaryEntry = (id: string) => BY_ID.get(id);
@@ -38,7 +39,7 @@ export function searchGlossary(q: string): GlossaryEntry[] {
 const LINKABLE = GLOSSARY.flatMap((e) =>
   [e.term.replace(/\s*\(.*\)$/, ""), ...(e.aliases ?? [])]
     // palavras curtas e genéricas demais geram link em todo lugar
-    .filter((a) => a.length >= 3 && !["banco", "fila", "pico", "lag", "API", "duração", "Usuários", "erros", "escritas", "réplica", "réplicas", "servidor", "servidores", "isolamento", "corrida", "gráfico", "consumidores", "shard"].includes(a))
+    .filter((a) => a.length >= 3 && !["banco", "fila", "pico", "lag", "API", "duração", "Usuários", "erros", "escritas", "réplica", "réplicas", "servidor", "servidores", "isolamento", "corrida", "gráfico", "consumidores", "shard", "custo", "429"].includes(a))
     .map((alias) => ({ alias, id: e.id })),
 ).sort((a, b) => b.alias.length - a.alias.length);
 

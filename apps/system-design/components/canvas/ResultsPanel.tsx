@@ -25,9 +25,11 @@ export function ResultsPanel() {
     );
   if (!r) return <p className="text-sm text-muted">Rode a simulação para ver throughput, latência e onde o sistema quebra.</p>;
 
+  // com bot, o que importa é o erro dos usuários legítimos (o 429 do bot é o objetivo)
+  const errRate = r.bot ? r.legit.errorRate : r.errorRate;
   const cards = [
     { label: "req/s", help: "req-s", value: r.totalRequests / r.simulatedSec, format: (x: number) => fmt(x) },
-    { label: "erros", help: "taxa-de-erro", value: r.errorRate * 100, format: (x: number) => `${fmt(x, 2)}%`, bad: r.errorRate > 0.01 },
+    { label: r.bot ? "erros legít." : "erros", help: "taxa-de-erro", value: errRate * 100, format: (x: number) => `${fmt(x, 2)}%`, bad: errRate > 0.01 },
     { label: "p50", help: "p50", value: r.latency.p50Ms, format: (x: number) => `${fmt(x, 1)} ms` },
     { label: "p99", help: "p99", value: r.latency.p99Ms, format: (x: number) => `${fmt(x, 1)} ms`, bad: r.latency.p99Ms > 500 },
   ];
@@ -52,6 +54,23 @@ export function ResultsPanel() {
           {fmt((r.consistency.staleReads / Math.max(1, r.consistency.dbReads)) * 100, 1)}% das leituras no banco)
         </div>
       )}
+      {r.duplicateEffects > 0 && (
+        <div className="rounded-md border border-bad/50 bg-bad/10 p-2 text-xs text-bad">
+          <span className="font-mono">{fmt(r.duplicateEffects)}</span> chamadas processadas em dobro <HelpDot id="idempotencia" /> (ex.: cobrança dupla)
+        </div>
+      )}
+      {r.bot && (
+        <div className="rounded-md border border-border p-2 text-xs text-muted">
+          Bot: <span className="font-mono">{fmt(r.bot.sent)}</span> requisições, <span className="font-mono">{fmt(r.bot.limited)}</span> barradas com 429 <HelpDot id="bot" />. Todos
+          os clientes juntos: {fmt(r.errorRate * 100, 1)}% de erro.
+        </div>
+      )}
+      {r.timeline.some((p) => p.instances !== undefined) && (
+        <div className="rounded-md border border-border p-2 text-xs text-muted">
+          Custo dos servidores: <span className="font-mono">{fmt(r.workerHours, 2)}</span> worker-horas <HelpDot id="custo-worker-hora" /> · instâncias de{" "}
+          {fmt(Math.min(...r.timeline.map((p) => p.instances ?? Infinity)))} a {fmt(Math.max(...r.timeline.map((p) => p.instances ?? 0)))}
+        </div>
+      )}
       {r.warnings.map((w) => (
         <p key={w} className="text-xs text-warn">{w}</p>
       ))}
@@ -68,7 +87,9 @@ export function ResultsPanel() {
       <div>
         <div className="mb-1 flex items-center gap-1.5 hud-label">
           Linha do tempo <HelpDot id="grafico" label="como ler o gráfico" />
-          <span className="ml-auto normal-case tracking-normal text-[10px] text-muted">verde ok · vermelho erro · azul p99</span>
+          <span className="ml-auto normal-case tracking-normal text-[10px] text-muted">
+            verde ok · vermelho erro · azul p99{r.timeline.some((p) => p.instances !== undefined) ? " · laranja instâncias" : ""}
+          </span>
         </div>
         <TimelineChart points={r.timeline} />
       </div>

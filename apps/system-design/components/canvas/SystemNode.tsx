@@ -34,7 +34,15 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
     if (metrics.replicaUtilization !== undefined) {
       sub = `prim. ${Math.round(metrics.utilization * 100)}% · rép. ${Math.round(metrics.replicaUtilization * 100)}%`;
     }
+    if (metrics.shardUtilization) sub = metrics.shardUtilization.map((u) => `${Math.round(u * 100)}%`).join(" · ");
+    if (metrics.limited) sub = `${compact(metrics.limited.total)} barradas (429)`;
+    if (metrics.instances) sub += ` · ${metrics.instances.max} inst.`;
+    if (metrics.effects?.duplicates) sub += ` · ${compact(metrics.effects.duplicates)} em dobro`;
+  } else if (data.kind === "rateLimiter") {
+    sub = `${Number(data.params.ratePerSec ?? 0).toLocaleString("pt-BR")}/s ${data.params.scope === "global" ? "global" : "por cliente"}`;
   }
+  const shards = data.kind === "database" ? Math.max(1, Number(data.params.shards ?? 1)) : 1;
+  const scaling = data.kind === "server" && !!data.params.autoscale;
   const replicas = data.kind === "database" ? Number(data.params.readReplicas ?? 0) : 0;
   const lag = metrics?.replicationLag;
   const rejectRate = metrics && metrics.arrivals > 0 ? metrics.rejected / metrics.arrivals : 0;
@@ -42,7 +50,8 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
   const flames = status === "bad" ? (rejectRate > 0.2 ? 3 : rejectRate > 0.05 ? 2 : 1) : 0;
   const hasTraffic = !!metrics && metrics.arrivals > 0 && status !== "down";
   const pingSec = metrics ? Math.max(0.7, 2.4 - metrics.utilization * 1.6) : 2;
-  const usage = metrics && data.kind !== "client" && data.kind !== "loadBalancer" && data.kind !== "queue" ? Math.min(1, metrics.utilization) : null;
+  const usage =
+    metrics && data.kind !== "client" && data.kind !== "loadBalancer" && data.kind !== "queue" && data.kind !== "rateLimiter" ? Math.min(1, metrics.utilization) : null;
 
   const tileStyle: CSSProperties = {
     width: TILE,
@@ -104,6 +113,14 @@ function SystemNodeImpl({ id, data, selected }: NodeProps<SysNode>) {
           {failing && (
             <div className="absolute -right-2 -top-2 rounded-sm bg-down px-1 font-mono text-[9px] font-bold leading-4 text-bg shadow-[0_0_8px_var(--down)]">
               {status === "down" ? "OFFLINE" : "!"}
+            </div>
+          )}
+          {shards > 1 && (
+            <div className="absolute -bottom-2 -left-2 rounded-sm border border-current bg-bg px-1 font-mono text-[9px] leading-4" title="shards">{shards} shards</div>
+          )}
+          {scaling && (
+            <div className="absolute -bottom-2 -left-2 rounded-sm border border-current bg-bg px-1 font-mono text-[9px] leading-4" title="autoscaling">
+              {String(data.params.minInstances ?? 1)}–{String(data.params.maxInstances ?? 10)}
             </div>
           )}
           {replicas > 0 && (

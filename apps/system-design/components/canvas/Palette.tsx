@@ -3,7 +3,7 @@
 import { KIND_LABEL, type NodeKind } from "@sdp/sim-engine";
 import { KIND_COLOR, KIND_GLYPH } from "./icons";
 
-const KINDS: NodeKind[] = ["client", "loadBalancer", "server", "cache", "cdn", "database", "queue", "external"];
+const KINDS: NodeKind[] = ["client", "loadBalancer", "server", "cache", "cdn", "database", "queue", "external", "rateLimiter"];
 
 export function Palette({ onAdd, compact = false }: { onAdd: (k: NodeKind) => void; compact?: boolean }) {
   if (compact) {

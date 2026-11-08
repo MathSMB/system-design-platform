@@ -9,6 +9,7 @@ export const DEFAULT_PARAMS: { [K in NodeKind]: NodeParamsByKind[K] } = {
     timeoutMs: 2000,
     writeRatio: 0.1,
     readAfterWriteMs: 100,
+    botRps: 0,
   },
   loadBalancer: { algorithm: "leastOutstanding" },
   server: { workers: 32, serviceTimeMs: 20, queueCapacity: 500, retries: 0 },
@@ -17,11 +18,18 @@ export const DEFAULT_PARAMS: { [K in NodeKind]: NodeParamsByKind[K] } = {
   database: { workers: 50, serviceTimeMs: 15, queueCapacity: 1000, readReplicas: 0, replicationDelayMs: 10, readYourWritesMs: 0 },
   queue: { capacity: 50_000, consumers: 4 },
   external: { workers: 10, serviceTimeMs: 300, queueCapacity: 100, errorRate: 0.01 },
+  rateLimiter: { ratePerSec: 1000, burst: 200, scope: "perClient" },
 };
 
+type Params = Record<string, unknown>;
+type Common = { key: string; label: string; help?: string; /** Só aparece quando a condição vale (ex.: campos do autoscaling). */ showIf?: (p: Params) => boolean };
+
 export type Field =
-  | { key: string; label: string; help?: string; type: "number"; step?: number; min?: number; max?: number }
-  | { key: string; label: string; help?: string; type: "select"; options: { value: string; label: string }[] };
+  | (Common & { type: "number"; step?: number; min?: number; max?: number; /** Valor quando o parâmetro não existe (desenhos antigos). */ def?: number })
+  | (Common & { type: "select"; options: { value: string; label: string }[] })
+  | (Common & { type: "toggle" });
+
+const autoscaling = (p: Params) => !!p.autoscale;
 
 const processing: Field[] = [
   { key: "workers", label: "Workers em paralelo", type: "number", min: 1, help: "Threads, conexões ou instâncias × threads." },
@@ -53,6 +61,14 @@ export const FIELDS: Record<NodeKind, Field[]> = {
       min: 0,
       help: "Ex.: postar e a página recarregar. Serve para ver se o usuário enxerga a própria escrita. 0 desliga.",
     },
+    {
+      key: "botRps",
+      label: "Bot com defeito (req/s)",
+      type: "number",
+      min: 0,
+      def: 0,
+      help: "Um cliente só (bot, integração em loop) mandando este tanto de requisições, além dos usuários. 0 desliga.",
+    },
   ],
   loadBalancer: [
     {
@@ -65,7 +81,33 @@ export const FIELDS: Record<NodeKind, Field[]> = {
       ],
     },
   ],
-  server: [...processing, { key: "retries", label: "Retries em dependências", type: "number", min: 0, max: 5, help: "Com backoff exponencial e jitter." }],
+  server: [
+    ...processing,
+    { key: "retries", label: "Retries em dependências", type: "number", min: 0, max: 5, help: "Com backoff exponencial e jitter." },
+    {
+      key: "callTimeoutMs",
+      label: "Timeout das chamadas (ms)",
+      type: "number",
+      min: 0,
+      def: 0,
+      help: "Desiste da dependência depois deste tempo (conta como falha e pode ter retry). 0: espera para sempre.",
+    },
+    { key: "blocking", label: "Thread presa esperando dependências", type: "toggle", help: "Uma thread por requisição (Tomcat, Spring MVC): a thread fica ocupada enquanto espera o banco ou a API." },
+    { key: "idempotencyKey", label: "Mandar chave de idempotência", type: "toggle", help: "Cada chamada leva um Idempotency-Key: a repetição não é processada de novo." },
+    { key: "autoscale", label: "Autoscaling", type: "toggle", help: "Workers passa a ser por instância; o número de instâncias muda com a carga." },
+    { key: "minInstances", label: "Instâncias mínimas", type: "number", min: 1, def: 1, showIf: autoscaling },
+    { key: "maxInstances", label: "Instâncias máximas", type: "number", min: 1, def: 10, showIf: autoscaling },
+    { key: "targetUtilization", label: "Utilização alvo (0 a 1)", type: "number", step: 0.05, min: 0.1, max: 0.95, def: 0.6, showIf: autoscaling },
+    {
+      key: "scaleDelaySec",
+      label: "Atraso para subir instância (s)",
+      type: "number",
+      min: 0,
+      def: 60,
+      showIf: autoscaling,
+      help: "VM nova ≈ 1–3 min; container numa máquina que já existe ≈ 5–30 s.",
+    },
+  ],
   cache: [{ key: "hitRate", label: "Hit rate (0 a 1)", type: "number", step: 0.01, min: 0, max: 1 }, ...processing],
   cdn: [{ key: "hitRate", label: "Hit rate (0 a 1)", type: "number", step: 0.01, min: 0, max: 1 }, ...processing],
   database: [
@@ -85,10 +127,45 @@ export const FIELDS: Record<NodeKind, Field[]> = {
       min: 0,
       help: "Read-your-writes: por este tempo após escrever, as leituras do usuário vão ao primário. 0 desliga.",
     },
+    { key: "shards", label: "Shards", type: "number", min: 1, max: 16, def: 1, help: "Divide os dados entre N bancos iguais. 1: sem sharding." },
+    {
+      key: "shardKey",
+      label: "Chave de sharding",
+      type: "select",
+      showIf: (p) => Number(p.shards ?? 1) > 1,
+      options: [
+        { value: "hash", label: "hash(user_id)" },
+        { value: "range", label: "Intervalo por data de criação" },
+      ],
+    },
+    {
+      key: "hotKeyShare",
+      label: "Tráfego numa chave só (0 a 1)",
+      type: "number",
+      step: 0.05,
+      min: 0,
+      max: 1,
+      def: 0,
+      showIf: (p) => Number(p.shards ?? 1) > 1,
+      help: "Ex.: o perfil de uma celebridade. Essa chave sempre cai no mesmo shard.",
+    },
   ],
   queue: [
     { key: "capacity", label: "Capacidade (mensagens)", type: "number", min: 1 },
     { key: "consumers", label: "Consumidores", type: "number", min: 1 },
   ],
   external: [...processing, { key: "errorRate", label: "Taxa de erro (0 a 1)", type: "number", step: 0.01, min: 0, max: 1 }],
+  rateLimiter: [
+    { key: "ratePerSec", label: "Requisições por segundo liberadas", type: "number", min: 0, help: "Reposição do balde (token bucket)." },
+    { key: "burst", label: "Tamanho do balde (rajada)", type: "number", min: 1, help: "Quantas passam de uma vez quando o balde está cheio." },
+    {
+      key: "scope",
+      label: "Limite",
+      type: "select",
+      options: [
+        { value: "perClient", label: "Por cliente (chave de API, usuário)" },
+        { value: "global", label: "Global (um balde para todos)" },
+      ],
+    },
+  ],
 };
